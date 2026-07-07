@@ -65,7 +65,7 @@ def process(entries):
 
 
 processed_data = data.map(process, batched=True, remove_columns=data.column_names)
-processed_data.save_to_disk(os.path.join(cwd, "processed metamathqa"))
+processed_data.save_to_disk(os.path.join(cwd, "processed-metamathqa"))
 print("data processed yippee :D")
 
 # %%
