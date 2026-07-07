@@ -1,5 +1,7 @@
 # %%
 # imports
+from random import shuffle
+
 import torch
 from datasets import load_from_disk, Dataset
 from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
@@ -13,6 +15,9 @@ val_data = data["test"]
 
 # %%
 # base model
-
+BATCH_SIZE = 4
 tokeniser = AutoTokenizer.from_pretrained("Qwen2.5-1.5B base model")
 model = AutoModelForCausalLM.from_pretrained("Qwen2.5-1.5B base model")
+train_dataloader = Dataloader(
+    dataset=train_data, shuffle=True, tokeniser=tokeniser, batch_size=BATCH_SIZE
+)
