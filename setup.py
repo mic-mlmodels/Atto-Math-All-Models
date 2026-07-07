@@ -3,9 +3,9 @@ from datasets import load_dataset
 from huggingface_hub import snapshot_download
 
 cwd = os.getcwd()
-print("starting download of the gsm8k dataset...")
-data = load_dataset("openai/gsm8k", "main")
-data.save_to_disk(os.path.join(cwd, "gsm8k_dataset"))
+print("starting download of the MetaMathQA dataset for the initial sft phase...")
+data = load_dataset("meta-math/MetaMathQA", split="train")
+data.to_json(os.path.join(cwd, "metamathqa.json"))
 print("finished download :D")
 
 print(

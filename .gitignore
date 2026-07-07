@@ -19,3 +19,5 @@ out/
 log
 gsm8k_dataset/
 Qwen2.5-1.5B base model/
+*.safetensors
+*.json
