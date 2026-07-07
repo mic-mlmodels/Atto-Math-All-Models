@@ -1,9 +1,10 @@
 # %%
 # downloads
+import inspect
 import os
 from datasets import load_dataset
 from huggingface_hub import snapshot_download
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, InputFeatures
 
 cwd = os.getcwd()
 print("starting download of the MetaMathQA dataset for the initial sft phase...")
@@ -22,9 +23,6 @@ print("finished download :D")
 # %%
 # processing
 tokeniser = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B")
-data[0]
-data[1]
-data[2]
 
 
 def process(entries):
@@ -32,31 +30,46 @@ def process(entries):
     attention_mask = []
     labels = []
     for response, query in zip(entries["response"], entries["query"]):
-        parts = response.rsplit("The answer is:", 1)
-        thinking = parts[0].strip()
-        answer = parts[1].strip()
-        full_lst = f"""<|im_start|>system
-You are a helpful assistant. You must think step-by-step inside <think> tags before providing the final answer after ####.<|im_end|>
-<|im_start|>user
-{query}<|im_end|>
-<|im_start|>assistant
-<think>
-{thinking}
-</think>
-#### {answer}<|im_end|>"""
-        thinking_lst = f"""<think>
-{thinking}
-</think>
-#### {answer}<|im_end|>"""
-        full_lst = tokeniser(full_lst)
-        thinking_lst = tokeniser(thinking_lst)
+        if "The answer is:" in response:
+            parts = response.rsplit("The answer is:", 1)
+            thinking = parts[0].strip()
+            answer = parts[1].strip()
+            full_lst = inspect.cleandoc(f"""
+                <|im_start|>system
+                You are a helpful assistant. You must think step-by-step inside <think> tags before providing the final answer after ####.<|im_end|>
+                <|im_start|>user
+                {query}<|im_end|>
+                <|im_start|>assistant
+                <think>
+                {thinking}
+                </think>
+                #### {answer}<|im_end|>
+            """)
 
-        input_ids.append(full_lst)
-        attention_mask.append([1] * len(full_lst))
-        labels.append([-100] * (len(full_lst) - len(thinking_lst)) + thinking_lst)
+            thinking_lst = inspect.cleandoc(f"""
+                <think>
+                {thinking}
+                </think>
+                #### {answer}<|im_end|>
+            """)
+            full_lst = tokeniser(full_lst)
+            thinking_lst = tokeniser(thinking_lst)
+
+            input_ids.append(full_lst["input_ids"])
+            attention_mask.append(full_lst["attention_mask"])
+            labels.append(
+                [-100] * (len(full_lst["input_ids"]) - len(thinking_lst["input_ids"]))
+                + thinking_lst["input_ids"]
+            )
     return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
 
 
-processed_data = data.map(process, batch_size=True, remove_columns=data.column_names)
+processed_data = data.map(process, batched=True, remove_columns=data.column_names)
 processed_data.save_to_disk(os.path.join(cwd, "processed metamathqa"))
 print("data processed yippee :D")
+
+# %%
+# process test
+len(processed_data)
+processed_data[0]
+processed_data[1]
