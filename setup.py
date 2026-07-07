@@ -27,19 +27,36 @@ data[1]
 data[2]
 
 
-def process(entry):
-    parts = entry["response"].rsplit("The answer is:", 1)
-    thinking = parts[0].strip()
-    answer = parts[1].strip()
-    return f""""<|im_start|>system
-    You are a helpful assistant. You must think step-by-step inside <think> tags before providing the final answer after ####.<|im_end|>
-    <|im_start|>user
-    {entry["query"]}<|im_end|>
-    <|im_start|>assistant
-    <think>
-    {thinking}
-    </think>
-    #### {answer}<|im_end|>"""
+def process(entries):
+    input_ids = []
+    attention_mask = []
+    labels = []
+    for response, query in zip(entries["response"], entries["query"]):
+        parts = response.rsplit("The answer is:", 1)
+        thinking = parts[0].strip()
+        answer = parts[1].strip()
+        full_lst = f"""<|im_start|>system
+You are a helpful assistant. You must think step-by-step inside <think> tags before providing the final answer after ####.<|im_end|>
+<|im_start|>user
+{query}<|im_end|>
+<|im_start|>assistant
+<think>
+{thinking}
+</think>
+#### {answer}<|im_end|>"""
+        thinking_lst = f"""<think>
+{thinking}
+</think>
+#### {answer}<|im_end|>"""
+        full_lst = tokeniser(full_lst)
+        thinking_lst = tokeniser(thinking_lst)
+
+        input_ids.append(full_lst)
+        attention_mask.append([1] * len(full_lst))
+        labels.append([-100] * (len(full_lst) - len(thinking_lst)) + thinking_lst)
+    return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
 
 
 processed_data = data.map(process, batch_size=True, remove_columns=data.column_names)
+processed_data.save_to_disk(os.path.join(cwd, "processed metamathqa"))
+print("data processed yippee :D")
