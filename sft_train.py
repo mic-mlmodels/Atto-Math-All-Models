@@ -12,11 +12,11 @@ import torch.nn.functional as F
 
 MAX_TOKENS = 768
 BATCH_SIZE = 2
-BOTTNECK_RANK = 4
+BOTTNECK_RANK = 16
 LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 5000
-MAX_LR = 1e-4
-MIN_LR = 1e-5
+MAX_LR = 1e-4 / 8
+MIN_LR = 1e-5 / 8
 data = load_from_disk("processed-metamathqa")
 data = data.filter(
     lambda x: len(x["input_ids"]) <= MAX_TOKENS
@@ -83,6 +83,9 @@ for step in range(NUM_STEPS):
     loss.backward()
     train_loss_lst.append(loss.item() * 8)
     if step % 8 == 0:
+        norm = torch.nn.utils.clip_grad_norm_(
+            [param for param in model.parameters() if param.requires_grad], max_norm=8.0
+        )
         optimiser.step()
         scheduler.step()
         optimiser.zero_grad()
@@ -100,7 +103,7 @@ for step in range(NUM_STEPS):
             val_out = model(**val_param_dict)
             val_loss = val_out.loss
             val_loss_lst.append(val_loss.item())
-        print(f"train loss: {train_loss_mean}")
+        print(f"step: {step}, train loss: {train_loss_mean}, grad norm: {norm}")
         del val_loss, val_out, val_param_dict
     if step % 32 == 0:
         val_loss_mean = np.mean(val_loss_lst)

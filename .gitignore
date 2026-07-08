@@ -23,3 +23,4 @@ Qwen2.5-1.5B base model/
 *.json
 metamathqa
 processed-metamathqa
+CLAUDE.md
