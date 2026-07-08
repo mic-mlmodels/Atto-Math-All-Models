@@ -15,8 +15,8 @@ BATCH_SIZE = 2
 BOTTNECK_RANK = 4
 LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 5000
-MAX_LR = 2e-5
-MIN_LR = 1e-6
+MAX_LR = 1e-4
+MIN_LR = 1e-5
 data = load_from_disk("processed-metamathqa")
 data = data.filter(
     lambda x: len(x["input_ids"]) <= MAX_TOKENS
@@ -43,7 +43,7 @@ optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
     params=[param for param in model.parameters() if param.requires_grad],
     lr=MAX_LR,
 )
-NUM_UPDATES = 5000 // 32
+NUM_UPDATES = 5000 // 8
 WARMUP_UPDATES = NUM_UPDATES // 10
 
 warmup_scheduler = LinearLR(
@@ -79,10 +79,10 @@ for step in range(NUM_STEPS):
         param_dict = next(train_iter)
     param_dict = {k: v.to(device) for k, v in param_dict.items()}
     out = model(**param_dict)
-    loss = out.loss / 32
+    loss = out.loss / 8
     loss.backward()
-    train_loss_lst.append(loss.item() * 32)
-    if step % 32 == 0:
+    train_loss_lst.append(loss.item() * 8)
+    if step % 8 == 0:
         optimiser.step()
         scheduler.step()
         optimiser.zero_grad()
@@ -102,7 +102,7 @@ for step in range(NUM_STEPS):
             val_loss_lst.append(val_loss.item())
         print(f"train loss: {train_loss_mean}")
         del val_loss, val_out, val_param_dict
-    if step % 148 == 0:
+    if step % 32 == 0:
         val_loss_mean = np.mean(val_loss_lst)
         mean_val_loss_lst.append(val_loss_mean)
         val_loss_lst = []

@@ -40,7 +40,7 @@ class LayerAdaptor(nn.Module):
 
     def forward(self, x):
         return (
-            self.original_layer(x) + self.adaptor(x) * self.bottleneck_rank / self.alpha
+            self.original_layer(x) + self.adaptor(x) * self.alpha / self.bottleneck_rank
         )
 
 
