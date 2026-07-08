@@ -1,6 +1,6 @@
 # %%
 # imports
-import inspect
+from lr_scheduler import lr_scheduler
 import numpy as np
 import torch
 from datasets import load_from_disk
@@ -14,8 +14,8 @@ MAX_TOKENS = 768
 BATCH_SIZE = 2
 BOTTNECK_RANK = 4
 LORA_ALPHA = BOTTNECK_RANK * 2
-LR = 3e-4
-NUM_STEPS = 3000
+NUM_STEPS = 5000
+MAX_LR = 2e-5
 data = load_from_disk("processed-metamathqa")
 data = data.filter(
     lambda x: len(x["input_ids"]) <= MAX_TOKENS
@@ -38,8 +38,10 @@ val_iter = iter(val_dataloader)
 adapt_model(model, BOTTNECK_RANK, device, LORA_ALPHA)
 model.to(device)  # type: ignore
 optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
-    params=[param for param in model.parameters() if param.requires_grad], lr=LR
+    params=[param for param in model.parameters() if param.requires_grad],
+    lr=MAX_LR,
 )
+scheduler = torch.optim.lr_scheduler.LambdaLR(optimiser, lr_scheduler)
 # %%
 # training yippee :D
 
@@ -69,6 +71,7 @@ for step in range(NUM_STEPS):
     train_loss_lst.append(loss.item() * 32)
     if step % 32 == 0:
         optimiser.step()
+        scheduler.step()
         optimiser.zero_grad()
         train_loss_mean = np.mean(train_loss_lst)
         mean_train_loss_lst.append(train_loss_mean)
