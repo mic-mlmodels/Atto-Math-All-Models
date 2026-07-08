@@ -1,29 +1,31 @@
 # %%
 # imports
 import inspect
-
 import numpy as np
 import torch
-from datasets import load_from_disk, Dataset
-from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
+from datasets import load_from_disk
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import bitsandbytes as bnb
 from dataloader import Dataloader
 from qlora import adapt_model
 import torch.nn.functional as F
 
+MAX_TOKENS = 768
+BATCH_SIZE = 2
+BOTTNECK_RANK = 4
+LORA_ALPHA = BOTTNECK_RANK * 2
+LR = 3e-4
+NUM_STEPS = 3000
 data = load_from_disk("processed-metamathqa")
-
+data = data.filter(
+    lambda x: len(x["input_ids"]) <= MAX_TOKENS
+)  # maybe should have put this in the initial data processing setup but this keeps it more flexible if i need to change filtering for grpo for example
 data = data.train_test_split(test_size=0.1, train_size=0.9)  # type: ignore
 train_data = data["train"]
 val_data = data["test"]
 
 # %%
 # base model
-BATCH_SIZE = 2
-BOTTNECK_RANK = 4
-LORA_ALPHA = BOTTNECK_RANK * 2
-LR = 3e-4
-NUM_STEPS = 3000
 device = "cuda" if torch.cuda.is_available() else "cpu"
 tokeniser = AutoTokenizer.from_pretrained("Qwen2.5-1.5B base model")
 model = AutoModelForCausalLM.from_pretrained("Qwen2.5-1.5B base model")
@@ -35,7 +37,7 @@ train_iter = iter(train_dataloader)
 val_iter = iter(val_dataloader)
 adapt_model(model, BOTTNECK_RANK, device, LORA_ALPHA)
 model.to(device)  # type: ignore
-optimiser = bnb.optim.PagedAdamW8bit(
+optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
     params=[param for param in model.parameters() if param.requires_grad], lr=LR
 )
 # %%
@@ -62,12 +64,12 @@ for step in range(NUM_STEPS):
         param_dict = next(train_iter)
     param_dict = {k: v.to(device) for k, v in param_dict.items()}
     out = model(**param_dict)
-    loss = out.loss
+    loss = out.loss / 32
     loss.backward()
-    optimiser.step()
-    optimiser.zero_grad()
-    train_loss_lst.append(loss.item())
-    if step % 20 == 0:
+    train_loss_lst.append(loss.item() * 32)
+    if step % 32 == 0:
+        optimiser.step()
+        optimiser.zero_grad()
         train_loss_mean = np.mean(train_loss_lst)
         mean_train_loss_lst.append(train_loss_mean)
         train_loss_lst = []
@@ -84,7 +86,7 @@ for step in range(NUM_STEPS):
             val_loss_lst.append(val_loss.item())
         print(f"train loss: {train_loss_mean}")
         del val_loss, val_out, val_param_dict
-    if step % 100 == 0:
+    if step % 148 == 0:
         val_loss_mean = np.mean(val_loss_lst)
         mean_val_loss_lst.append(val_loss_mean)
         val_loss_lst = []
@@ -95,17 +97,22 @@ print("Atto-Math-SFT model cooked!")
 
 # %%
 # eval time
-import inspect
-import torch.nn.functional as F
 
 model.eval()
-test_prompt = inspect.cleandoc("""
-    <|im_start|>system
-    You are a helpful assistant. You must think step-by-step inside <think> tags before providing the final answer after ####.<|im_end|>
-    <|im_start|>user
-    Given the complex expression Z = (3 + 2i)(1 - 4i) / (2 + i), simplify Z completely into its standard rectangular form a + bi.<|im_end|>
-    <|im_start|>assistant
-""")
+test_prompt = tokeniser.apply_chat_template(
+    [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant. You must think step-by-step inside <think> tags before providing the final answer after ####.",
+        },
+        {
+            "role": "user",
+            "content": "Given the complex expression Z = (3 + 2i)(1 - 4i) / (2 + i), simplify Z completely into its standard rectangular form a + bi.",
+        },
+    ],
+    tokenize=False,
+    add_generation_prompt=True,
+)
 with torch.no_grad():
     tokenised_prompt = torch.unsqueeze(
         torch.tensor(tokeniser(test_prompt)["input_ids"]).to(device), dim=0
