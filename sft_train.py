@@ -1,12 +1,11 @@
 # %%
 # imports
-from random import shuffle
 import numpy as np
 import torch
 from datasets import load_from_disk, Dataset
 from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
+import bitsandbytes as bnb
 from dataloader import Dataloader
-import dataloader
 from qlora import adapt_model
 
 data = load_from_disk("processed-metamathqa")
@@ -17,11 +16,11 @@ val_data = data["test"]
 
 # %%
 # base model
-BATCH_SIZE = 4
-BOTTNECK_RANK = 4
+BATCH_SIZE = 2
+BOTTNECK_RANK = 2
 LORA_ALPHA = BOTTNECK_RANK * 2
 LR = 3e-4
-NUM_STEPS = 100
+NUM_STEPS = 1000
 device = "cuda" if torch.cuda.is_available() else "cpu"
 tokeniser = AutoTokenizer.from_pretrained("Qwen2.5-1.5B base model")
 model = AutoModelForCausalLM.from_pretrained("Qwen2.5-1.5B base model")
@@ -31,9 +30,16 @@ train_iter = iter(train_dataloader)
 val_iter = iter(val_dataloader)
 adapt_model(model, BOTTNECK_RANK, device, LORA_ALPHA)
 model.to(device)  # type: ignore
-optimiser = torch.optim.AdamW(
+optimiser = bnb.optim.PagedAdamW8bit(
     params=[param for param in model.parameters() if param.requires_grad], lr=LR
 )
+# %%
+# training yippee :D
+
+len(train_data[0]["input_ids"])
+len(train_data[0]["attention_mask"])
+len(train_data[0]["labels"])
+len(train_data)
 
 # %%
 # training yippee :D
@@ -73,7 +79,7 @@ for step in range(NUM_STEPS):
             val_loss_lst.append(val_loss.item())
         print(f"train loss: {train_loss_mean}")
         del val_loss, val_out, val_param_dict
-    if step % 100:
+    if step % 100 == 0:
         val_loss_mean = np.mean(val_loss_lst)
         mean_val_loss_lst.append(val_loss_mean)
         val_loss_lst = []

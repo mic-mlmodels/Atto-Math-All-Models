@@ -24,10 +24,15 @@ class LayerAdaptor(nn.Module):
         for param in self.original_layer.parameters():
             param.requires_grad = False
             self.adaptor = nn.Sequential(
-                nn.Linear(self.original_layer.in_features, self.bottleneck_rank),
+                nn.Linear(
+                    self.original_layer.in_features,
+                    self.bottleneck_rank,
+                    dtype=bfloat16,
+                ),
                 nn.Linear(
                     self.bottleneck_rank,
                     self.original_layer.out_features,
+                    dtype=bfloat16,
                 ),
             )
             nn.init.kaiming_uniform_(self.adaptor[0].weight, a=1)  # type: ignore
