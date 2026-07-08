@@ -16,14 +16,16 @@ val_data = data["test"]
 
 # %%
 # base model
-BATCH_SIZE = 2
-BOTTNECK_RANK = 2
+BATCH_SIZE = 8
+BOTTNECK_RANK = 4
 LORA_ALPHA = BOTTNECK_RANK * 2
 LR = 3e-4
 NUM_STEPS = 1000
 device = "cuda" if torch.cuda.is_available() else "cpu"
 tokeniser = AutoTokenizer.from_pretrained("Qwen2.5-1.5B base model")
 model = AutoModelForCausalLM.from_pretrained("Qwen2.5-1.5B base model")
+model.config.use_cache = False
+model.gradient_checkpointing_enable()
 train_dataloader = Dataloader(train_data, True, tokeniser, BATCH_SIZE)
 val_dataloader = Dataloader(val_data, False, tokeniser, BATCH_SIZE)
 train_iter = iter(train_dataloader)
