@@ -5,7 +5,7 @@ from bitsandbytes.nn.modules import Linear4bit, Params4bit
 
 
 class LayerAdaptor(nn.Module):
-    def __init__(self, original_layer, bottleneck_rank, layer_type, device, lora_alpha):
+    def __init__(self, original_layer, bottleneck_rank, device, lora_alpha):
         super().__init__()
         self.alpha = lora_alpha
         self.bottleneck_rank = bottleneck_rank
@@ -23,7 +23,6 @@ class LayerAdaptor(nn.Module):
         ).cuda()
         for param in self.original_layer.parameters():
             param.requires_grad = False
-        if layer_type == "linear":
             self.adaptor = nn.Sequential(
                 nn.Linear(self.original_layer.in_features, self.bottleneck_rank),
                 nn.Linear(
@@ -41,14 +40,20 @@ class LayerAdaptor(nn.Module):
 
 
 def adapt_model(model, bottleneck_rank, device, lora_alpha):
-    for layer_name, layer in model.named_children():
-        if layer_name == "lm_head":
-            continue
+    adapt_todo_lst = []
+    for layer_name, layer in model.named_modules():
         if isinstance(layer, nn.Linear):
-            setattr(
-                model,
-                layer_name,
-                LayerAdaptor(layer, bottleneck_rank, "linear", device, lora_alpha),
-            )
-        else:
-            adapt_model(layer, bottleneck_rank, device, lora_alpha)
+            adapt_todo_lst.append(layer)
+    for adapt_todo in adapt_todo_lst:
+        modules = adapt_todo.split(".")
+        parent = modules[0]
+        for module in modules[-1]:
+            if module.isdigit():
+                parent = parent[module]
+            else:
+                parent = getattr(parent, module)
+        setattr(
+            parent,
+            adapt_todo_lst[-1],
+            LayerAdaptor(layer, bottleneck_rank, device, lora_alpha),
+        )
