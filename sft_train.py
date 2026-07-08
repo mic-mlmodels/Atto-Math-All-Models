@@ -1,6 +1,6 @@
 # %%
 # imports
-from lr_scheduler import lr_scheduler
+from torch.optim.lr_scheduler import ChainedScheduler, LinearLR, CosineAnnealingLR
 import numpy as np
 import torch
 from datasets import load_from_disk
@@ -16,6 +16,7 @@ BOTTNECK_RANK = 4
 LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 5000
 MAX_LR = 2e-5
+MIN_LR = 1e-6
 data = load_from_disk("processed-metamathqa")
 data = data.filter(
     lambda x: len(x["input_ids"]) <= MAX_TOKENS
@@ -30,6 +31,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 tokeniser = AutoTokenizer.from_pretrained("Qwen2.5-1.5B base model")
 model = AutoModelForCausalLM.from_pretrained("Qwen2.5-1.5B base model")
 model.config.use_cache = False
+model.enable_input_require_grads()
 model.gradient_checkpointing_enable()
 train_dataloader = Dataloader(train_data, True, tokeniser, BATCH_SIZE)
 val_dataloader = Dataloader(val_data, False, tokeniser, BATCH_SIZE)
@@ -41,7 +43,18 @@ optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
     params=[param for param in model.parameters() if param.requires_grad],
     lr=MAX_LR,
 )
-scheduler = torch.optim.lr_scheduler.LambdaLR(optimiser, lr_scheduler)
+NUM_UPDATES = 5000 // 32
+WARMUP_UPDATES = NUM_UPDATES // 10
+
+warmup_scheduler = LinearLR(
+    optimiser, start_factor=0.05, end_factor=1.0, total_iters=WARMUP_UPDATES
+)
+
+decay_scheduler = CosineAnnealingLR(
+    optimiser, T_max=(NUM_UPDATES - WARMUP_UPDATES), eta_min=MIN_LR
+)
+
+scheduler = ChainedScheduler([warmup_scheduler, decay_scheduler])
 # %%
 # training yippee :D
 
