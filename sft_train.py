@@ -1,5 +1,7 @@
 # %%
 # imports
+import inspect
+
 import numpy as np
 import torch
 from datasets import load_from_disk, Dataset
@@ -7,6 +9,7 @@ from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 import bitsandbytes as bnb
 from dataloader import Dataloader
 from qlora import adapt_model
+import torch.nn.functional as F
 
 data = load_from_disk("processed-metamathqa")
 
@@ -16,11 +19,11 @@ val_data = data["test"]
 
 # %%
 # base model
-BATCH_SIZE = 8
+BATCH_SIZE = 2
 BOTTNECK_RANK = 4
 LORA_ALPHA = BOTTNECK_RANK * 2
 LR = 3e-4
-NUM_STEPS = 1000
+NUM_STEPS = 3000
 device = "cuda" if torch.cuda.is_available() else "cpu"
 tokeniser = AutoTokenizer.from_pretrained("Qwen2.5-1.5B base model")
 model = AutoModelForCausalLM.from_pretrained("Qwen2.5-1.5B base model")
@@ -92,3 +95,30 @@ print("Atto-Math-SFT model cooked!")
 
 # %%
 # eval time
+import inspect
+import torch.nn.functional as F
+
+model.eval()
+test_prompt = inspect.cleandoc("""
+    <|im_start|>system
+    You are a helpful assistant. You must think step-by-step inside <think> tags before providing the final answer after ####.<|im_end|>
+    <|im_start|>user
+    Given the complex expression Z = (3 + 2i)(1 - 4i) / (2 + i), simplify Z completely into its standard rectangular form a + bi.<|im_end|>
+    <|im_start|>assistant
+""")
+with torch.no_grad():
+    tokenised_prompt = torch.unsqueeze(
+        torch.tensor(tokeniser(test_prompt)["input_ids"]).to(device), dim=0
+    )
+    next_word = 0
+    while next_word != tokeniser.eos_token_id and tokenised_prompt.shape[-1] < 1024:
+        out = model(tokenised_prompt)
+        logits = out.logits
+        probs = F.softmax(logits[:, -1, :], dim=-1)
+        dist_obj = torch.distributions.Categorical(probs)
+        next_word = dist_obj.sample()
+        tokenised_prompt = torch.cat(
+            (tokenised_prompt, torch.unsqueeze(next_word, dim=0)),
+            dim=-1,
+        )
+    print(tokeniser.decode(torch.squeeze(tokenised_prompt)))
