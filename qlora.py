@@ -20,7 +20,7 @@ class LayerAdaptor(nn.Module):
         self.original_layer.weight = Params4bit(
             original_layer.weight.data.clone().cpu(),
             requires_grad=False,
-        ).cuda()
+        )
         for param in self.original_layer.parameters():
             param.requires_grad = False
             self.adaptor = nn.Sequential(
@@ -43,17 +43,17 @@ def adapt_model(model, bottleneck_rank, device, lora_alpha):
     adapt_todo_lst = []
     for layer_name, layer in model.named_modules():
         if isinstance(layer, nn.Linear):
-            adapt_todo_lst.append(layer)
-    for adapt_todo in adapt_todo_lst:
-        modules = adapt_todo.split(".")
-        parent = modules[0]
-        for module in modules[-1]:
+            adapt_todo_lst.append((layer_name, layer))
+    for adapt_todo_name, adapt_todo_layer in adapt_todo_lst:
+        modules = adapt_todo_name.split(".")
+        parent = model
+        for module in modules[:-1]:
             if module.isdigit():
-                parent = parent[module]
+                parent = parent[int(module)]
             else:
                 parent = getattr(parent, module)
         setattr(
             parent,
-            adapt_todo_lst[-1],
-            LayerAdaptor(layer, bottleneck_rank, device, lora_alpha),
+            modules[-1],
+            LayerAdaptor(adapt_todo_layer, bottleneck_rank, device, lora_alpha),
         )
