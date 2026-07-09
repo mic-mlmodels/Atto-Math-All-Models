@@ -197,3 +197,26 @@ with torch.no_grad():
         eos_token_id=[tokeniser.eos_token_id, imend_token],
     )
 print(tokeniser.decode(generated[0]))
+# %%
+# graph
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(10, 6))
+x_train_steps = np.arange(0, len(mean_train_loss_lst) * 8, 8)
+x_val_steps = np.arange(0, len(mean_val_loss_lst) * 64, 64)
+ax.plot(
+    x_train_steps,
+    mean_train_loss_lst,
+    label="Train Loss (Mean every 8 gradient accumulation steps)",
+)
+ax.plot(x_val_steps, mean_val_loss_lst, label="Val Loss (Mean every 64 steps)")
+ax.set_title("Loss curve")
+ax.set_xlabel("Training Step")
+ax.set_ylabel("Cross Entropy Loss")
+ax.grid(True, linestyle="--", alpha=0.6)
+ax.legend()
+plt.tight_layout()
+plt.savefig("Atto-Math-SFT-V0-checkpoint1 loss_curve.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+# %%
