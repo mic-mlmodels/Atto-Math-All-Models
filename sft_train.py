@@ -18,8 +18,8 @@ BATCH_SIZE = 2
 BOTTNECK_RANK = 16
 LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 15000
-MAX_LR = 1e-4 / 8
-MIN_LR = 1e-5 / 8
+MAX_LR = 1e-4
+MIN_LR = 1e-5
 
 # %%
 # data load
@@ -95,7 +95,7 @@ for step in range(NUM_STEPS):
     train_loss_lst.append(loss.item() * 8)
     if step % 8 == 0:
         norm = torch.nn.utils.clip_grad_norm_(
-            [param for param in model.parameters() if param.requires_grad], max_norm=8.0
+            [param for param in model.parameters() if param.requires_grad], max_norm=1.0
         )
         optimiser.step()
         scheduler.step()
@@ -116,7 +116,7 @@ for step in range(NUM_STEPS):
             val_loss_lst.append(val_loss.item())
         print(f"step: {step}, train loss: {train_loss_mean}, grad norm: {norm}")
         del val_loss, val_out, val_param_dict
-    if step % 32 == 0:
+    if step % 64 == 0:
         val_loss_mean = np.mean(val_loss_lst)
         mean_val_loss_lst.append(val_loss_mean)
         val_loss_lst = []
