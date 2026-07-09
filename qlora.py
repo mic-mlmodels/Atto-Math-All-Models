@@ -1,11 +1,10 @@
 from torch import bfloat16, uint8
 import torch.nn as nn
-import bitsandbytes as bnb
 from bitsandbytes.nn.modules import Linear4bit, Params4bit
 
 
 class LayerAdaptor(nn.Module):
-    def __init__(self, original_layer, bottleneck_rank, device, lora_alpha):
+    def __init__(self, original_layer, bottleneck_rank, lora_alpha):
         super().__init__()
         self.alpha = lora_alpha
         self.bottleneck_rank = bottleneck_rank
@@ -22,8 +21,8 @@ class LayerAdaptor(nn.Module):
         self.original_layer.weight = Params4bit(
             original_layer.weight.data.clone().cpu(),
             requires_grad=False,
-            quant_type="nf4",
-            quant_storage=uint8,
+            quant_type="nf4",  # type: ignore
+            quant_storage=uint8,  # type: ignore
         )
         if self.original_bias_present:
             self.original_layer.bias = nn.Parameter(
@@ -54,7 +53,7 @@ class LayerAdaptor(nn.Module):
         )
 
 
-def adapt_model(model, bottleneck_rank, device, lora_alpha):
+def adapt_model(model, bottleneck_rank, lora_alpha):
     adapt_todo_lst = []
     for layer_name, layer in model.named_modules():
         if isinstance(layer, nn.Linear):
@@ -70,5 +69,5 @@ def adapt_model(model, bottleneck_rank, device, lora_alpha):
         setattr(
             parent,
             modules[-1],
-            LayerAdaptor(adapt_todo_layer, bottleneck_rank, device, lora_alpha),
+            LayerAdaptor(adapt_todo_layer, bottleneck_rank, lora_alpha),
         )

@@ -1,5 +1,6 @@
 # %%
 # imports
+import matplotlib.pyplot as plt
 from torch.optim.lr_scheduler import ChainedScheduler, LinearLR, CosineAnnealingLR
 import numpy as np
 import torch
@@ -45,7 +46,7 @@ train_dataloader = Dataloader(train_data, True, tokeniser, BATCH_SIZE)
 val_dataloader = Dataloader(val_data, False, tokeniser, BATCH_SIZE)
 train_iter = iter(train_dataloader)
 val_iter = iter(val_dataloader)
-adapt_model(model, BOTTNECK_RANK, device, LORA_ALPHA)
+adapt_model(model, BOTTNECK_RANK, LORA_ALPHA)
 model.to(device)  # type: ignore
 optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
     params=[param for param in model.parameters() if param.requires_grad],
@@ -68,11 +69,6 @@ decay_scheduler = CosineAnnealingLR(
 scheduler = ChainedScheduler([warmup_scheduler, decay_scheduler])
 # %%
 # training yippee :D
-
-len(train_data[0]["input_ids"])
-len(train_data[0]["attention_mask"])
-len(train_data[0]["labels"])
-len(train_data)
 mean_train_loss_lst = []
 mean_val_loss_lst = []
 
@@ -199,7 +195,6 @@ with torch.no_grad():
 print(tokeniser.decode(generated[0]))
 # %%
 # graph
-import matplotlib.pyplot as plt
 
 fig, ax = plt.subplots(figsize=(10, 6))
 x_train_steps = np.arange(0, len(mean_train_loss_lst) * 8, 8)
