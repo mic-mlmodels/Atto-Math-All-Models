@@ -30,6 +30,8 @@ val_data = data["test"]
 device = "cuda" if torch.cuda.is_available() else "cpu"
 tokeniser = AutoTokenizer.from_pretrained("Qwen2.5-1.5B base model")
 model = AutoModelForCausalLM.from_pretrained("Qwen2.5-1.5B base model")
+for param in model.parameters():
+    param.requires_grad = False
 model.config.use_cache = False
 model.enable_input_require_grads()
 model.gradient_checkpointing_enable()

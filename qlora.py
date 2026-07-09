@@ -9,34 +9,40 @@ class LayerAdaptor(nn.Module):
         super().__init__()
         self.alpha = lora_alpha
         self.bottleneck_rank = bottleneck_rank
+        self.original_bias_present = original_layer.bias is not None
         self.original_layer = Linear4bit(
             original_layer.in_features,
             original_layer.out_features,
-            bias=False,
+            bias=self.original_bias_present,
             compute_dtype=bfloat16,
             quant_type="nf4",
             quant_storage=uint8,
         )
+
         self.original_layer.weight = Params4bit(
             original_layer.weight.data.clone().cpu(),
             requires_grad=False,
         )
+        if self.original_bias_present:
+            self.original_layer.bias = nn.Parameter(
+                original_layer.bias.data.clone(), requires_grad=False
+            )
         for param in self.original_layer.parameters():
             param.requires_grad = False
-            self.adaptor = nn.Sequential(
-                nn.Linear(
-                    self.original_layer.in_features,
-                    self.bottleneck_rank,
-                    dtype=bfloat16,
-                ),
-                nn.Linear(
-                    self.bottleneck_rank,
-                    self.original_layer.out_features,
-                    dtype=bfloat16,
-                ),
-            )
-            nn.init.kaiming_uniform_(self.adaptor[0].weight, a=1)  # type: ignore
-            nn.init.zeros_(self.adaptor[1].weight)  # type: ignore
+        self.adaptor = nn.Sequential(
+            nn.Linear(
+                self.original_layer.in_features,
+                self.bottleneck_rank,
+                dtype=bfloat16,
+            ),
+            nn.Linear(
+                self.bottleneck_rank,
+                self.original_layer.out_features,
+                dtype=bfloat16,
+            ),
+        )
+        nn.init.kaiming_uniform_(self.adaptor[0].weight, a=1)  # type: ignore
+        nn.init.zeros_(self.adaptor[1].weight)  # type: ignore
 
     def forward(self, x):
         return (
