@@ -35,11 +35,13 @@ class LayerAdaptor(nn.Module):
             nn.Linear(
                 self.original_layer.in_features,
                 self.bottleneck_rank,
+                bias=False,
                 dtype=bfloat16,
             ),
             nn.Linear(
                 self.bottleneck_rank,
                 self.original_layer.out_features,
+                bias=False,
                 dtype=bfloat16,
             ),
         )

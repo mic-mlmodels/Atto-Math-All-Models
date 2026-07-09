@@ -17,7 +17,7 @@ MAX_TOKENS = 768
 BATCH_SIZE = 2
 BOTTNECK_RANK = 16
 LORA_ALPHA = BOTTNECK_RANK * 2
-NUM_STEPS = 5000
+NUM_STEPS = 15000
 MAX_LR = 1e-4 / 8
 MIN_LR = 1e-5 / 8
 
@@ -124,6 +124,19 @@ for step in range(NUM_STEPS):
 
     del out, loss, param_dict
 print("Atto-Math-SFT model cooked!")
+
+torch.save(
+    {
+        "model_state_dict": {
+            name: param
+            for name, param in model.named_parameters()
+            if param.requires_grad
+        },
+        "mean_train_loss_lst": mean_train_loss_lst,
+        "mean_val_loss_lst": mean_val_loss_lst,
+    },
+    "Atto-Math-SFT-V0-checkpoint1.pt",
+)
 
 # %%
 # eval time
