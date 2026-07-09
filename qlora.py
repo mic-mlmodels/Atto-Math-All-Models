@@ -22,6 +22,8 @@ class LayerAdaptor(nn.Module):
         self.original_layer.weight = Params4bit(
             original_layer.weight.data.clone().cpu(),
             requires_grad=False,
+            quant_type="nf4",
+            quant_storage=uint8,
         )
         if self.original_bias_present:
             self.original_layer.bias = nn.Parameter(

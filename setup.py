@@ -70,7 +70,7 @@ def process(entries):
             )["input_ids"]
             for i in range(len(tokens)):
                 if tokens[i : i + len(end_sequence)] == end_sequence:
-                    mask_end_idx = i + len(end_sequence)
+                    mask_end_idx = i + len(end_sequence) - 1
                     break
             input_ids.append(tokens)
             attention_mask.append([1] * len(tokens))

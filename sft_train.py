@@ -10,6 +10,9 @@ from dataloader import Dataloader
 from qlora import adapt_model
 import torch.nn.functional as F
 
+# %%
+# constants
+
 MAX_TOKENS = 768
 BATCH_SIZE = 2
 BOTTNECK_RANK = 16
@@ -17,6 +20,9 @@ LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 5000
 MAX_LR = 1e-4 / 8
 MIN_LR = 1e-5 / 8
+
+# %%
+# data load
 data = load_from_disk("processed-metamathqa")
 data = data.filter(
     lambda x: len(x["input_ids"]) <= MAX_TOKENS
@@ -45,7 +51,10 @@ optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
     params=[param for param in model.parameters() if param.requires_grad],
     lr=MAX_LR,
 )
-NUM_UPDATES = 5000 // 8
+
+# %%
+# lr scheduler
+NUM_UPDATES = NUM_STEPS // 8
 WARMUP_UPDATES = NUM_UPDATES // 10
 
 warmup_scheduler = LinearLR(
@@ -64,14 +73,14 @@ len(train_data[0]["input_ids"])
 len(train_data[0]["attention_mask"])
 len(train_data[0]["labels"])
 len(train_data)
+mean_train_loss_lst = []
+mean_val_loss_lst = []
 
 # %%
 # training yippee :D
 print("Atto-Math-SFT model cooking...")
 train_loss_lst = []
-mean_train_loss_lst = []
 val_loss_lst = []
-mean_val_loss_lst = []
 for step in range(NUM_STEPS):
     model.train()
     try:
@@ -134,12 +143,18 @@ test_prompt = tokeniser.apply_chat_template(
     tokenize=False,
     add_generation_prompt=True,
 )
+test_prompt = test_prompt
 with torch.no_grad():
     tokenised_prompt = torch.unsqueeze(
         torch.tensor(tokeniser(test_prompt)["input_ids"]).to(device), dim=0
     )
     next_word = 0
-    while next_word != tokeniser.eos_token_id and tokenised_prompt.shape[-1] < 1024:
+    imend_token = tokeniser.convert_tokens_to_ids("<|im_end|>")
+    while (
+        next_word != tokeniser.eos_token_id
+        and tokenised_prompt.shape[-1] < 1024
+        and next_word != imend_token
+    ):
         out = model(tokenised_prompt)
         logits = out.logits
         probs = F.softmax(logits[:, -1, :], dim=-1)
@@ -150,3 +165,22 @@ with torch.no_grad():
             dim=-1,
         )
     print(tokeniser.decode(torch.squeeze(tokenised_prompt)))
+
+# %%
+# eval time but hf library
+
+model.eval()
+model.config.use_cache = True
+imend_token = tokeniser.convert_tokens_to_ids("<|im_end|>")
+inputs = tokeniser(test_prompt, return_tensors="pt").to(device)
+with torch.no_grad():
+    generated = model.generate(  # type: ignore
+        **inputs,
+        max_new_tokens=1024,
+        do_sample=True,
+        top_p=0.9,
+        repetition_penalty=1.3,
+        no_repeat_ngram_size=3,
+        eos_token_id=[tokeniser.eos_token_id, imend_token],
+    )
+print(tokeniser.decode(generated[0]))
