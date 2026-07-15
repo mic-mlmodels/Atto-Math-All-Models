@@ -24,6 +24,9 @@ def load_cooked_model(BOTTNECK_RANK, LORA_ALPHA, device, params_path):
 
 # %%
 # func to extract out the actual answer
+def extract_answer(out):
+    return out.split("####")[-1].strip()
+
 
 # %%
 # top secret testing ground
