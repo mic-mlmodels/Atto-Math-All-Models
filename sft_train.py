@@ -10,6 +10,7 @@ import bitsandbytes as bnb
 from dataloader import Dataloader
 from qlora import adapt_model
 import torch.nn.functional as F
+import torchinfo
 
 # %%
 # constants
@@ -215,3 +216,6 @@ plt.savefig("Atto-Math-SFT-V0-checkpoint1 loss_curve.png", dpi=300, bbox_inches=
 plt.show()
 
 # %%
+# just some random stuff in this cell
+
+torchinfo.summary(model)
