@@ -17,7 +17,9 @@ def load_cooked_model(BOTTNECK_RANK, LORA_ALPHA, device, params_path):
     model.gradient_checkpointing_enable()
     adapt_model(model, BOTTNECK_RANK, LORA_ALPHA)
     model.to(device)  # type: ignore
-    model.load_state_dict(torch.load(params_path))
+    model.load_state_dict(
+        torch.load(params_path, weights_only=False)["model_state_dict"]
+    )  # for anyone running this code (thx for checking it out btw), i set the weights_only param as False but this is safe as its just primarily to allow some numpy ops in the pickle stream and nothing malicious
 
 
 # %%
@@ -42,3 +44,6 @@ load_cooked_model(
     device,
     params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
 )
+
+# %%
+# top secret testing ground
