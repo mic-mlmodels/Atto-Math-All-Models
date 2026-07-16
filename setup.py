@@ -90,6 +90,39 @@ processed_data.save_to_disk(os.path.join(cwd, "processed-metamathqa"))
 print("data processed yippee :D")
 
 # %%
+# eval process
+
+
+def eval_process(entries):
+    input_ids = []
+    attention_mask = []
+    for response, query in zip(entries["answer"], entries["question"]):
+        if "####" in response:
+            parts = response.rsplit("####", 1)
+            labels = parts[1].strip()
+            tokens = tokeniser(
+                tokeniser.apply_chat_template(
+                    [
+                        {
+                            "role": "system",
+                            "content": "You are a helpful assistant. You must think step-by-step inside <think> tags before providing the final answer after ####.",
+                        },
+                        {"role": "user", "content": query},
+                    ],
+                    tokenize=False,
+                )
+            )["input_ids"]
+            input_ids.append(tokens)
+            attention_mask.append([1] * len(tokens))
+
+    return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}  # type: ignore
+
+
+processed_data = data.map(process, batched=True, remove_columns=data.column_names)
+processed_data.save_to_disk(os.path.join(cwd, "processed-metamathqa"))
+print("data processed yippee :D")
+
+# %%
 # process test
 len(processed_data)
 processed_data[0]
