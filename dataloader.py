@@ -9,6 +9,9 @@ class Dataloader:
         self.tokeniser = tokeniser
         self.batch_size = batch_size
 
+    def __len__(self):
+        return len(self.dataset)
+
     def __iter__(self):
         iter_lst = list(range(len(self.dataset)))
         if self.shuffle:
