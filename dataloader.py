@@ -3,11 +3,12 @@ import torch
 
 
 class Dataloader:
-    def __init__(self, dataset, shuffle, tokeniser, batch_size):
+    def __init__(self, dataset, shuffle, tokeniser, batch_size, eval=False):
         self.dataset = dataset
         self.shuffle = shuffle
         self.tokeniser = tokeniser
         self.batch_size = batch_size
+        self.eval = eval
 
     def __len__(self):
         return len(self.dataset)
@@ -41,9 +42,20 @@ class Dataloader:
                 input_ids + [self.tokeniser.eos_token_id] * padding
             )
             masks_lst.append(attention_mask + [0] * padding)
-            label_lst.append(labels + [-100] * padding)
-        return {
-            "input_ids": torch.tensor(padded_text_tokens_lst),  # type: ignore
-            "attention_mask": torch.tensor(masks_lst),
-            "labels": torch.tensor(label_lst),
-        }
+            if self.eval:
+                label_lst.append(labels)
+            else:
+                label_lst.append(labels + [-100] * padding)
+        if self.eval:
+            return {
+                "input_ids": torch.tensor(padded_text_tokens_lst),  # type: ignore
+                "attention_mask": torch.tensor(masks_lst),
+                "labels": label_lst,
+            }
+
+        else:
+            return {
+                "input_ids": torch.tensor(padded_text_tokens_lst),  # type: ignore
+                "attention_mask": torch.tensor(masks_lst),
+                "labels": torch.tensor(label_lst),
+            }

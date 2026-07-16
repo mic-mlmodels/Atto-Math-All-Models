@@ -153,7 +153,6 @@ test_prompt = tokeniser.apply_chat_template(
     tokenize=False,
     add_generation_prompt=True,
 )
-test_prompt = test_prompt
 with torch.no_grad():
     tokenised_prompt = torch.unsqueeze(
         torch.tensor(tokeniser(test_prompt)["input_ids"]).to(device), dim=0

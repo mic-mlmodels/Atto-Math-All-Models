@@ -1,5 +1,6 @@
 # %%
 # imports
+import torch.nn.functional as F
 from transformers import AutoTokenizer
 from utils import extract_answer, load_cooked_model
 import os
@@ -34,7 +35,7 @@ model = load_cooked_model(
     params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
 )
 tokeniser = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B")
-dataloader = Dataloader(processed_data, True, tokeniser, BATCH_SIZE)
+dataloader = Dataloader(processed_data, True, tokeniser, BATCH_SIZE, eval=True)
 data_iter = iter(dataloader)
 correct = 0
 total = 0
@@ -46,14 +47,30 @@ model.to(device)  # type: ignore
 with torch.inference_mode():
     for i in range(len(dataloader)):
         if i % 8 == 0:
-            print("i")
-        param_dict = next(data_iter)
-        param_dict = {k: v.to(device) for k, v in param_dict.items() if k != "labels"}
-        out = extract_answer(model(**param_dict))
-        if out == extract_answer(param_dict["labels"]):
-            correct += 1
-        total += 1
-        del out, param_dict
+            print(i)
+        original_param_dict = next(data_iter)
+        tokenised_prompt = original_param_dict["input_ids"]
+        next_word = 0
+        imend_token = tokeniser.convert_tokens_to_ids("<|im_end|>")
+        while (
+            next_word != tokeniser.eos_token_id
+            and tokenised_prompt.shape[-1] < 1024
+            and next_word != imend_token
+        ):
+            out = model(tokenised_prompt)
+            logits = out.logits
+            probs = F.softmax(logits[:, -1, :], dim=-1)
+            dist_obj = torch.distributions.Categorical(probs)
+            next_word = dist_obj.sample()
+            tokenised_prompt = torch.cat(
+                (tokenised_prompt, torch.unsqueeze(next_word, dim=0)),
+                dim=-1,
+            )
+            out = extract_answer(tokeniser.decode(tokenised_prompt))
+            if out == extract_answer(original_param_dict["labels"]):  # type: ignore
+                correct += 1
+            total += 1
+            del out, original_param_dict  # type: ignore
 
 # %%
 # results
