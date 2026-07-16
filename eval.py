@@ -6,6 +6,7 @@ import os
 import torch
 from dataloader import Dataloader
 from datasets import load_dataset
+from setup import process
 
 # %%
 # setup
@@ -20,6 +21,13 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 cwd = os.getcwd()
 gsm8k_test = load_dataset("openai/gsm8k", "main", split="test")
 gsm8k_test.save_to_disk(os.path.join(cwd, "gsm8k_test"))
+processed_data = gsm8k_test.map(
+    process,
+    batched=True,
+    remove_columns=gsm8k_test.column_names,
+    fn_kwargs={"standardise": True},
+)
+processed_data.save_to_disk(os.path.join(cwd, "processed-gsm8k-test"))
 
 
 model = load_cooked_model(

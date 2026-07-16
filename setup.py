@@ -41,11 +41,17 @@ print(end_sequence)  # type: ignore
 # processing
 
 
-def process(entries):
+def process(entries, standarise=False):
     input_ids = []
     attention_mask = []
     labels = []
-    for response, query in zip(entries["response"], entries["query"]):
+    if standarise:
+        query = "question"
+        response = "answer"
+    else:
+        query = "query"
+        response = "response"
+    for response, query in zip(entries[response], entries[query]):
         if "The answer is:" in response:
             parts = response.rsplit("The answer is:", 1)
             thinking = parts[0].strip()
