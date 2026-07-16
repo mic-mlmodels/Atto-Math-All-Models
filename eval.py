@@ -12,6 +12,7 @@ from setup import eval_process
 # %%
 # setup
 MAX_TOKENS = 768
+EVAL_BATCH_SIZE = 8
 BATCH_SIZE = 1
 BOTTNECK_RANK = 16
 LORA_ALPHA = BOTTNECK_RANK * 2
@@ -49,7 +50,9 @@ with torch.inference_mode():
         if i % 8 == 0:
             print(i)
         original_param_dict = next(data_iter)
-        tokenised_prompt = original_param_dict["input_ids"]
+        tokenised_prompt = (
+            original_param_dict["input_ids"].repeat(EVAL_BATCH_SIZE, 1).to(device)
+        )
         next_word = 0
         imend_token = tokeniser.convert_tokens_to_ids("<|im_end|>")
         while (
@@ -63,11 +66,15 @@ with torch.inference_mode():
             dist_obj = torch.distributions.Categorical(probs)
             next_word = dist_obj.sample()
             tokenised_prompt = torch.cat(
-                (tokenised_prompt, torch.unsqueeze(next_word, dim=0)),
+                (tokenised_prompt, next_word),
                 dim=-1,
             )
-            out = extract_answer(tokeniser.decode(tokenised_prompt))
-            if out == extract_answer(original_param_dict["labels"]):  # type: ignore
+            decoded_out = tokeniser.batch_decode(tokenised_prompt)
+            group_correct = 0
+            for row in decoded_out:
+                if int(extract_answer(row)) == int(original_param_dict["labels"]):  # type: ignore
+                    group_correct += 1
+            if group_correct > 4:
                 correct += 1
             total += 1
             del out, original_param_dict  # type: ignore
