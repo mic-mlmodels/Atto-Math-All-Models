@@ -96,10 +96,11 @@ print("data processed yippee :D")
 def eval_process(entries):
     input_ids = []
     attention_mask = []
+    labels = []
     for response, query in zip(entries["answer"], entries["question"]):
         if "####" in response:
             parts = response.rsplit("####", 1)
-            labels = parts[1].strip()
+            labels.append(parts[1].strip())
             tokens = tokeniser(
                 tokeniser.apply_chat_template(
                     [
@@ -109,6 +110,7 @@ def eval_process(entries):
                         },
                         {"role": "user", "content": query},
                     ],
+                    add_generation_prompt=True,
                     tokenize=False,
                 )
             )["input_ids"]
@@ -117,10 +119,6 @@ def eval_process(entries):
 
     return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}  # type: ignore
 
-
-processed_data = data.map(process, batched=True, remove_columns=data.column_names)
-processed_data.save_to_disk(os.path.join(cwd, "processed-metamathqa"))
-print("data processed yippee :D")
 
 # %%
 # process test

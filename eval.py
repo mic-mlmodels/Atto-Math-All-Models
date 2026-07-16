@@ -34,7 +34,7 @@ model = load_cooked_model(
     params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
 )
 tokeniser = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B")
-dataloader = Dataloader(gsm8k_test, True, tokeniser, BATCH_SIZE)
+dataloader = Dataloader(processed_data, True, tokeniser, BATCH_SIZE)
 data_iter = iter(dataloader)
 correct = 0
 total = 0
@@ -62,3 +62,4 @@ print(correct, total)
 # %%
 # data testing grounds
 gsm8k_test[0]
+processed_data[0]
