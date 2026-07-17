@@ -73,18 +73,26 @@ with torch.inference_mode():
                 (tokenised_prompt, torch.unsqueeze(next_word, dim=1)),
                 dim=-1,
             )
-            decoded_out = tokeniser.batch_decode(tokenised_prompt)
-            group_correct = 0
-            # THIS IS WRONG IMPLENTATION OF MAJ BUT I GOTTA FIX UP EVERYTHING ELSE FIRST
-            for row in decoded_out:
-                if int(extract_answer(row)) == int(original_param_dict["labels"]):  # type: ignore
-                    group_correct += 1
-            if group_correct > 4:
-                correct += 1
-            total += 1
-            del out  # type: ignore
-            # THIS IS WRONG IMPLENTATION OF MAJ BUT I GOTTA FIX UP EVERYTHING ELSE FIRST
-        del original_param_dict
+        decoded_out = tokeniser.batch_decode(tokenised_prompt)
+        group_correct = 0
+        # THIS IS WRONG IMPLENTATION OF MAJ BUT I GOTTA FIX UP EVERYTHING ELSE FIRST
+        maj_dict = {}
+        for row in decoded_out:
+            if int(extract_answer(row)) == int(original_param_dict["labels"][0]):  # type: ignore
+                group_correct += 1
+            else:
+                maj_dict[int(extract_answer(row))] = 1 + maj_dict.get(
+                    int(extract_answer(row)), 0
+                )
+        highest = 0
+        for k, v in maj_dict.items():
+            if v > highest:
+                highest = v
+        if group_correct > highest:
+            correct += 1
+        total += 1
+        del out, original_param_dict  # type: ignore
+        # THIS IS WRONG IMPLENTATION OF MAJ BUT I GOTTA FIX UP EVERYTHING ELSE FIRST
 # %%
 # results
 print(correct, total)
