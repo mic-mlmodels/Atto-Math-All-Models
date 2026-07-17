@@ -22,7 +22,12 @@ def load_cooked_model(BOTTNECK_RANK, LORA_ALPHA, device, params_path):
 # %%
 # func to extract out the actual answer
 def extract_answer(out):
-    return out.rsplit("####", 1)[-1].split("<|im_end|>")[0].split("<|endoftext|>")[0].strip()
+    return (
+        out.rsplit("####", 1)[-1]
+        .split("<|im_end|>")[0]
+        .split("<|endoftext|>")[0]
+        .strip()
+    )
 
 
 # %%
@@ -37,13 +42,32 @@ MIN_LR = 1e-5
 device = "cuda" if torch.cuda.is_available() else "cpu"
 cwd = os.getcwd()
 
-
-model = load_cooked_model(
-    BOTTNECK_RANK,
-    LORA_ALPHA,
-    device,
-    params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
-)
-
 # %%
-# top secret testing ground
+# eval process
+
+
+def eval_process(entries, tokeniser):
+    input_ids = []
+    attention_mask = []
+    labels = []
+    for response, query in zip(entries["answer"], entries["question"]):
+        if "####" in response:
+            parts = response.rsplit("####", 1)
+            labels.append(parts[1].strip())
+            tokens = tokeniser(
+                tokeniser.apply_chat_template(
+                    [
+                        {
+                            "role": "system",
+                            "content": "You are a helpful assistant. You must think step-by-step inside <think> tags before providing the final answer after ####.",
+                        },
+                        {"role": "user", "content": query},
+                    ],
+                    add_generation_prompt=True,
+                    tokenize=False,
+                )
+            )["input_ids"]
+            input_ids.append(tokens)
+            attention_mask.append([1] * len(tokens))
+
+    return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}  # type: ignore
