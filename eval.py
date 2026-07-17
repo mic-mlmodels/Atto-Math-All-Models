@@ -53,19 +53,22 @@ with torch.inference_mode():
         tokenised_prompt = (
             original_param_dict["input_ids"].repeat(EVAL_BATCH_SIZE, 1).to(device)
         )
-        next_word = 0
+        finished = torch.zeros(
+            EVAL_BATCH_SIZE,
+            dtype=torch.bool,
+        ).to(device)
         imend_token = tokeniser.convert_tokens_to_ids("<|im_end|>")
-        # WE HAVE TO FIX THIS WHILE LOOP COS IT WON"T WORK FOR BATCHES AND WILL CONTINOUSLY GENERATE DUE TO THE FLAWED CONDITIONS, IDEA IS THAT WE STOP WHEN EVERY SEQUENCE HAS AN EOS TOKEN AND THEN WE REMOVE THE EOS TOKEN AND EVERYTHING BEHIND IT IN THE PROCESS FUNCTION. ITS OK TO CONTINUE GNERATING AFTER EOS SINCE WE CUT IT OUT.
-        while (
-            next_word != tokeniser.eos_token_id
-            and tokenised_prompt.shape[-1] < 1024
-            and next_word != imend_token
-        ):
+        while not finished.all() and tokenised_prompt.shape[-1] < 1024:
             out = model(tokenised_prompt)
             logits = out.logits
             probs = F.softmax(logits[:, -1, :], dim=-1)
             dist_obj = torch.distributions.Categorical(probs)
             next_word = dist_obj.sample()
+            finished = (
+                finished
+                | (next_word == tokeniser.eos_token_id)
+                | (next_word == imend_token)
+            )
             tokenised_prompt = torch.cat(
                 (tokenised_prompt, torch.unsqueeze(next_word, dim=1)),
                 dim=-1,
@@ -79,9 +82,9 @@ with torch.inference_mode():
             if group_correct > 4:
                 correct += 1
             total += 1
-            del out, original_param_dict  # type: ignore
+            del out  # type: ignore
             # THIS IS WRONG IMPLENTATION OF MAJ BUT I GOTTA FIX UP EVERYTHING ELSE FIRST
-
+        del original_param_dict
 # %%
 # results
 print(correct, total)
