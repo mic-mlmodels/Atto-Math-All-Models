@@ -55,15 +55,19 @@ with torch.inference_mode():
         original_param_dict = next(data_iter)
         mask = (
             original_param_dict["attention_mask"]
-            .repeat(EVAL_MAJ_BATCH_SIZE, 1)
+            .repeat_interleave(EVAL_MAJ_BATCH_SIZE, dim=0)
             .to(device)
         )
         input = (
-            original_param_dict["input_ids"].repeat(EVAL_MAJ_BATCH_SIZE, 1).to(device),
+            original_param_dict["input_ids"]
+            .repeat_interleave(EVAL_MAJ_BATCH_SIZE, dim=0)
+            .to(device),
             mask,
         )
         tokenised_prompt = (
-            original_param_dict["input_ids"].repeat(EVAL_MAJ_BATCH_SIZE, 1).to(device)
+            original_param_dict["input_ids"]
+            .repeat_interleave(EVAL_MAJ_BATCH_SIZE, dim=0)
+            .to(device)
         )
         finished = torch.zeros(
             BATCH_SIZE * EVAL_MAJ_BATCH_SIZE,
@@ -93,32 +97,37 @@ with torch.inference_mode():
                 dim=-1,
             )
         decoded_out = tokeniser.batch_decode(tokenised_prompt)
-        group_correct = 0
-        maj_dict = {}
-        for row in decoded_out:
-            try:
-                if float(extract_answer(row)) == float(
-                    original_param_dict["labels"][0]
-                ):  # type: ignore
-                    group_correct += 1
-                else:
+        for i in range(BATCH_SIZE):
+            group_correct = 0
+            maj_dict = {}
+            for row in decoded_out[
+                i * EVAL_MAJ_BATCH_SIZE : i * EVAL_MAJ_BATCH_SIZE + EVAL_MAJ_BATCH_SIZE
+            ]:
+                try:
+                    if float(extract_answer(row)) == float(
+                        original_param_dict["labels"][i]  # type: ignore
+                    ):  # type: ignore
+                        group_correct += 1
+                    else:
+                        maj_dict[extract_answer(row)] = 1 + maj_dict.get(
+                            extract_answer(row), 0
+                        )
+                except ValueError:
+                    print(
+                        extract_answer(row)
+                    )  # temp btw just to see what types of questions my model fail on.
                     maj_dict[extract_answer(row)] = 1 + maj_dict.get(
                         extract_answer(row), 0
                     )
-            except ValueError:
-                print(
-                    extract_answer(row)
-                )  # temp btw just to see what types of questions my model fail on.
-                maj_dict[extract_answer(row)] = 1 + maj_dict.get(extract_answer(row), 0)
-        highest = 0
-        for k, v in maj_dict.items():
-            if v > highest:
-                highest = v
-        if (
-            group_correct > highest
-        ):  # its kinda ambigious what the standard for maj is so i currently set it as beating the mode and not just mode itself
-            correct += 1
-        total += 1
+            highest = 0
+            for k, v in maj_dict.items():
+                if v > highest:
+                    highest = v
+            if (
+                group_correct > highest
+            ):  # its kinda ambigious what the standard for maj is so i currently set it as beating the mode and not just mode itself
+                correct += 1
+            total += 1
         del out, original_param_dict  # type: ignore
 
 # %%
