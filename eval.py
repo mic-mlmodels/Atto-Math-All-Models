@@ -48,22 +48,25 @@ model.eval()
 model.to(device)  # type: ignore
 with torch.inference_mode():
     # for i in range(len(dataloader)):
-    for i in range(30):
+    for i in range(5):
         # if i % 8 == 0:
         #     print(i)
         print(i)
         original_param_dict = next(data_iter)
-        input = (
-            original_param_dict["input_ids"].repeat(EVAL_MAJ_BATCH_SIZE, 1).to(device),
+        mask = (
             original_param_dict["attention_mask"]
             .repeat(EVAL_MAJ_BATCH_SIZE, 1)
-            .to(device),
+            .to(device)
+        )
+        input = (
+            original_param_dict["input_ids"].repeat(EVAL_MAJ_BATCH_SIZE, 1).to(device),
+            mask,
         )
         tokenised_prompt = (
             original_param_dict["input_ids"].repeat(EVAL_MAJ_BATCH_SIZE, 1).to(device)
         )
         finished = torch.zeros(
-            EVAL_MAJ_BATCH_SIZE,
+            BATCH_SIZE * EVAL_MAJ_BATCH_SIZE,
             dtype=torch.bool,
         ).to(device)
         imend_token = tokeniser.convert_tokens_to_ids("<|im_end|>")
@@ -75,7 +78,11 @@ with torch.inference_mode():
             probs = F.softmax(logits[:, -1, :], dim=-1)
             dist_obj = torch.distributions.Categorical(probs)
             next_word = dist_obj.sample()
-            input = next_word.unsqueeze(1)
+            mask = torch.cat(
+                (mask, torch.ones(EVAL_MAJ_BATCH_SIZE * BATCH_SIZE, 1, device=device)),
+                dim=-1,
+            )
+            input = (next_word.unsqueeze(1), mask)
             finished = (
                 finished
                 | (next_word == tokeniser.eos_token_id)
