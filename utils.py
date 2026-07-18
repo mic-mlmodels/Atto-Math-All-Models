@@ -8,7 +8,7 @@ from qlora import adapt_model
 
 # %%
 # func to return the model with my glorious params
-def load_cooked_model(BOTTNECK_RANK, LORA_ALPHA, device, params_path):
+def load_cooked_model(BOTTNECK_RANK, LORA_ALPHA, params_path):
     model = AutoModelForCausalLM.from_pretrained("Qwen2.5-1.5B base model")
     for param in model.parameters():
         param.requires_grad = False
