@@ -11,8 +11,8 @@ from datasets import load_dataset
 # %%
 # setup
 MAX_TOKENS = 768
-EVAL_BATCH_SIZE = 8
-BATCH_SIZE = 1
+EVAL_MAJ_BATCH_SIZE = 8
+BATCH_SIZE = 2
 BOTTNECK_RANK = 16
 LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 15000
@@ -48,21 +48,28 @@ model.eval()
 model.to(device)  # type: ignore
 with torch.inference_mode():
     # for i in range(len(dataloader)):
-    for i in range(10):
+    for i in range(30):
         # if i % 8 == 0:
         #     print(i)
         print(i)
         original_param_dict = next(data_iter)
-        input = original_param_dict["input_ids"].repeat(EVAL_BATCH_SIZE, 1).to(device)
-        tokenised_prompt = input
+        input = (
+            original_param_dict["input_ids"].repeat(EVAL_MAJ_BATCH_SIZE, 1).to(device),
+            original_param_dict["attention_mask"]
+            .repeat(EVAL_MAJ_BATCH_SIZE, 1)
+            .to(device),
+        )
+        tokenised_prompt = (
+            original_param_dict["input_ids"].repeat(EVAL_MAJ_BATCH_SIZE, 1).to(device)
+        )
         finished = torch.zeros(
-            EVAL_BATCH_SIZE,
+            EVAL_MAJ_BATCH_SIZE,
             dtype=torch.bool,
         ).to(device)
         imend_token = tokeniser.convert_tokens_to_ids("<|im_end|>")
         kv_cache = None
         while not finished.all() and tokenised_prompt.shape[-1] < 1024:
-            out = model(input, past_key_values=kv_cache, use_cache=True)
+            out = model(*input, past_key_values=kv_cache, use_cache=True)
             kv_cache = out.past_key_values
             logits = out.logits
             probs = F.softmax(logits[:, -1, :], dim=-1)
@@ -100,7 +107,9 @@ with torch.inference_mode():
         for k, v in maj_dict.items():
             if v > highest:
                 highest = v
-        if group_correct > highest:
+        if (
+            group_correct > highest
+        ):  # its kinda ambigious what the standard for maj is so i currently set it as beating the mode and not just mode itself
             correct += 1
         total += 1
         del out, original_param_dict  # type: ignore
