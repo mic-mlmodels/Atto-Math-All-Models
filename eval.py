@@ -81,12 +81,20 @@ with torch.inference_mode():
         # THIS IS WRONG IMPLENTATION OF MAJ BUT I GOTTA FIX UP EVERYTHING ELSE FIRST
         maj_dict = {}
         for row in decoded_out:
-            if int(extract_answer(row)) == int(original_param_dict["labels"][0]):  # type: ignore
-                group_correct += 1
-            else:
-                maj_dict[int(extract_answer(row))] = 1 + maj_dict.get(
-                    int(extract_answer(row)), 0
-                )
+            try:
+                if float(extract_answer(row)) == float(
+                    original_param_dict["labels"][0]
+                ):  # type: ignore
+                    group_correct += 1
+                else:
+                    maj_dict[extract_answer(row)] = 1 + maj_dict.get(
+                        extract_answer(row), 0
+                    )
+            except ValueError:
+                print(
+                    row
+                )  # temp btw just to see what types of questions my model fail on.
+                maj_dict[extract_answer(row)] = 1 + maj_dict.get(extract_answer(row), 0)
         highest = 0
         for k, v in maj_dict.items():
             if v > highest:
