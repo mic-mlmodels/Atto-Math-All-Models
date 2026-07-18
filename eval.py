@@ -68,7 +68,7 @@ with torch.inference_mode():
             probs = F.softmax(logits[:, -1, :], dim=-1)
             dist_obj = torch.distributions.Categorical(probs)
             next_word = dist_obj.sample()
-            input = next_word
+            input = next_word.unsqueeze(0)
             finished = (
                 finished
                 | (next_word == tokeniser.eos_token_id)
