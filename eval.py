@@ -48,7 +48,7 @@ total = 0
 model.eval()
 model.to(device)  # type: ignore
 with torch.inference_mode():
-    for i in range(len(dataloader) // BATCH_SIZE + 1):
+    for i in range(len(dataloader)):
         print(i)
         original_param_dict = next(data_iter)
         current_batch = original_param_dict["input_ids"].shape[0]

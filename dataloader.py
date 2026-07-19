@@ -11,7 +11,10 @@ class Dataloader:
         self.eval = eval
 
     def __len__(self):
-        return len(self.dataset)
+        if len(self.dataset) % self.batch_size == 0:
+            return len(self.dataset) / self.batch_size
+        else:
+            return len(self.dataset) // self.batch_size + 1
 
     def __iter__(self):
         iter_lst = list(range(len(self.dataset)))
