@@ -97,9 +97,6 @@ for step in range(NUM_STEPS):
         optimiser.step()
         scheduler.step()
         optimiser.zero_grad()
-        train_loss_mean = np.mean(train_loss_lst)
-        mean_train_loss_lst.append(train_loss_mean)
-        train_loss_lst = []
         model.eval()
         with torch.no_grad():
             try:
@@ -111,13 +108,18 @@ for step in range(NUM_STEPS):
             val_out = model(**val_param_dict)
             val_loss = val_out.loss
             val_loss_lst.append(val_loss.item())
-        print(f"step: {step}, train loss: {train_loss_mean}, grad norm: {norm}")
+        print(f"step: {step}, grad norm: {norm}")
         del val_loss, val_out, val_param_dict
-    if step % 64 == 0:
+    if step % 32 == 0:
+        train_loss_mean = np.mean(train_loss_lst)
+        mean_train_loss_lst.append(train_loss_mean)
+        train_loss_lst = []
+        print(f"step: {step}, train loss: {train_loss_mean}")
+    if step % 256 == 0:
         val_loss_mean = np.mean(val_loss_lst)
         mean_val_loss_lst.append(val_loss_mean)
         val_loss_lst = []
-        print(f"val loss: {val_loss_mean}")
+        print(f"step: {step}, val loss: {val_loss_mean}")
 
     del out, loss, param_dict
 print("Atto-Math-SFT model cooked!")
@@ -136,7 +138,7 @@ torch.save(
 )
 
 # %%
-# eval time
+# simple eval, full eval in eval.py
 
 model.eval()
 test_prompt = tokeniser.apply_chat_template(
@@ -176,7 +178,7 @@ with torch.no_grad():
     print(tokeniser.decode(torch.squeeze(tokenised_prompt)))
 
 # %%
-# eval time but hf library
+# eval but hf library
 
 model.eval()
 model.config.use_cache = True
@@ -197,14 +199,14 @@ print(tokeniser.decode(generated[0]))
 # graph
 
 fig, ax = plt.subplots(figsize=(10, 6))
-x_train_steps = np.arange(0, len(mean_train_loss_lst) * 8, 8)
-x_val_steps = np.arange(0, len(mean_val_loss_lst) * 64, 64)
+x_train_steps = np.arange(0, len(mean_train_loss_lst) * 32, 32)
+x_val_steps = np.arange(0, len(mean_val_loss_lst) * 256, 256)
 ax.plot(
     x_train_steps,
     mean_train_loss_lst,
-    label="Train Loss (Mean every 8 gradient accumulation steps)",
+    label="Train Loss (Mean every 32 steps)",
 )
-ax.plot(x_val_steps, mean_val_loss_lst, label="Val Loss (Mean every 64 steps)")
+ax.plot(x_val_steps, mean_val_loss_lst, label="Val Loss (Mean every 32 val steps)")
 ax.set_title("Loss curve")
 ax.set_xlabel("Training Step")
 ax.set_ylabel("Cross Entropy Loss")

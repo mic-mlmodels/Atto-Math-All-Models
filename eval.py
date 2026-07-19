@@ -80,7 +80,7 @@ with torch.inference_mode():
             )
             kv_cache = out.past_key_values
             logits = out.logits
-            probs = F.softmax(logits[:, -1, :], dim=-1)
+            probs = F.softmax(logits[:, -1, :] / 0.7, dim=-1)
             dist_obj = torch.distributions.Categorical(probs)
             next_word = dist_obj.sample()
             mask = torch.cat(
