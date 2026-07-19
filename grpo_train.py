@@ -3,11 +3,11 @@
 
 import torch.nn.functional as F
 from transformers import AutoTokenizer
-from utils import extract_answer, load_cooked_model, eval_process
+from utils import extract_answer, load_cooked_model
 import os
 import torch
 from dataloader import Dataloader
-from datasets import load_dataset, load_from_disk
+from datasets import load_from_disk
 import bitsandbytes as bnb
 
 # %%
@@ -43,7 +43,6 @@ train_dataloader = Dataloader(train_data, True, tokeniser, BATCH_SIZE)
 val_dataloader = Dataloader(val_data, False, tokeniser, BATCH_SIZE)
 train_iter = iter(train_dataloader)
 val_iter = iter(val_dataloader)
-model.to(device)  # type: ignore
 optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
     params=[param for param in model.parameters() if param.requires_grad],
     lr=MAX_LR,
@@ -51,3 +50,142 @@ optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
 
 # %%
 # grpo time fellas ;D
+
+EPISODE_NUM = 1000
+DISCOUNT = 0.99
+EPSILON = 0.2
+OLD_POLICY_LOOPS = 4
+NEW_POLICY_LOOPS = 8
+policy_v0 = model.to(device)  # type: ignore
+old_policy_v0 = model.to(device)  # type: ignore
+policy_optimiser = torch.optim.AdamW(lr=3e-4, params=policy_v0.parameters())
+episode_rewards = []
+mean_rewards = []
+for episode in range(EPISODE_NUM):
+    if episode % 100 == 0:
+        print(episode)
+    old_policy_v0.load_state_dict(policy_v0.state_dict())
+    for param in old_policy_v0.parameters():
+        param.requires_grad = False
+    old_log_probs_stack = []
+    old_returns_stack = []
+    tokenised_prompt_stack = []
+    with torch.no_grad():
+        for i in range(OLD_POLICY_LOOPS):
+            print(i)
+            original_param_dict = next(train_iter)
+            current_batch = original_param_dict["input_ids"].shape[0]
+            mask = (
+                original_param_dict["attention_mask"]
+                .repeat_interleave(EVAL_MAJ_BATCH_SIZE, dim=0)
+                .to(device)
+            )
+            input = (
+                original_param_dict["input_ids"]
+                .repeat_interleave(EVAL_MAJ_BATCH_SIZE, dim=0)
+                .to(device),
+                mask,
+            )
+            tokenised_prompt = (
+                original_param_dict["input_ids"]
+                .repeat_interleave(EVAL_MAJ_BATCH_SIZE, dim=0)
+                .to(device)
+            )
+            finished = torch.zeros(
+                current_batch * EVAL_MAJ_BATCH_SIZE,
+                dtype=torch.bool,
+            ).to(device)
+            imend_token = tokeniser.convert_tokens_to_ids("<|im_end|>")
+            kv_cache = None
+            old_log_probs_lst = []
+            while not finished.all() and tokenised_prompt.shape[-1] < 1024:
+                out = model(
+                    *input, past_key_values=kv_cache, use_cache=True, logits_to_keep=1
+                )
+                kv_cache = out.past_key_values
+                logits = out.logits
+                probs = F.softmax(logits[:, -1, :], dim=-1)
+                dist_obj = torch.distributions.Categorical(probs)
+                next_word = dist_obj.sample()
+                old_log_probs_lst.append(dist_obj.log_prob(next_word))
+                mask = torch.cat(
+                    (
+                        mask,
+                        torch.ones(
+                            EVAL_MAJ_BATCH_SIZE * current_batch, 1, device=device
+                        ),
+                    ),
+                    dim=-1,
+                )
+                input = (next_word.unsqueeze(1), mask)
+                finished = (
+                    finished
+                    | (next_word == tokeniser.eos_token_id)
+                    | (next_word == imend_token)
+                )
+                tokenised_prompt = torch.cat(
+                    (tokenised_prompt, torch.unsqueeze(next_word, dim=1)),
+                    dim=-1,
+                )
+            decoded_out = tokeniser.batch_decode(tokenised_prompt)
+            old_log_probs_tensor = torch.stack(old_log_probs_lst)
+            old_log_probs_stack.append(old_log_probs_tensor)
+            for i in range(current_batch):
+                group_correct = 0
+                maj_dict = {}
+                for row in decoded_out[
+                    i * EVAL_MAJ_BATCH_SIZE : i * EVAL_MAJ_BATCH_SIZE
+                    + EVAL_MAJ_BATCH_SIZE
+                ]:
+                    try:
+                        if float(extract_answer(row).replace(",", "")) == float(
+                            original_param_dict["labels"][i].replace(",", "")  # type: ignore
+                        ):
+                            old_returns_tensor = torch.ones_like(
+                                old_log_probs_tensor, device=device
+                            )
+                        else:
+                            old_returns_tensor = torch.zeros_like(
+                                old_log_probs_tensor, device=device
+                            )
+                    except ValueError:
+                        print("Value error oh no")
+                        old_returns_tensor = torch.zeros_like(
+                            old_log_probs_tensor, device=device
+                        )
+            tokenised_prompt_stack.append(tokenised_prompt)
+            old_returns_stack.append(old_returns_tensor)  # type: ignore
+            del out, original_param_dict  # type: ignore
+    old_advantage_tensor = torch.stack(old_returns_stack) - torch.mean(
+        torch.stack(old_returns_stack), dim=-1
+    )  # type: ignore
+    old_log_probs_stack = torch.stack(old_log_probs_stack)
+    # UP TO HERE BTW JUST START IMPLEMENTING NEW POLICY LOOP
+    for i in range(NEW_POLICY_LOOPS):
+        policy_optimiser.zero_grad()
+        new_action_logits = policy_v0(tokenised_prompt_stack)
+        new_action_probs = F.softmax(new_action_logits, dim=-1)
+        new_action_distributions = torch.distributions.Categorical(
+            probs=new_action_probs
+        )
+
+        new_log_probs_lst = new_action_distributions.log_prob(old_actions_lst)
+        policy_loss = -torch.mean(
+            torch.minimum(
+                torch.exp(new_log_probs_lst - old_log_probs_lst) * old_advantage_lst,
+                torch.clip(
+                    torch.exp(new_log_probs_lst - old_log_probs_lst),
+                    1 - EPSILON,
+                    1 + EPSILON,
+                )
+                * old_advantage_lst,
+            )
+        )
+        policy_loss.backward()
+        new_state_value_lst = value_v0(old_states_lst).squeeze()
+        value_loss = torch.mean((new_state_value_lst - old_returns_lst) ** 2)
+        value_loss.backward()
+        policy_optimiser.step()
+for i in range(EPISODE_NUM // 50):
+    mean_rewards.append(np.mean(episode_rewards[i * 50 : (i + 1) * 50]))
+print(mean_rewards)
