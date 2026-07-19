@@ -12,7 +12,7 @@ class Dataloader:
 
     def __len__(self):
         if len(self.dataset) % self.batch_size == 0:
-            return len(self.dataset) / self.batch_size
+            return len(self.dataset) // self.batch_size
         else:
             return len(self.dataset) // self.batch_size + 1
 

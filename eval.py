@@ -12,7 +12,7 @@ from datasets import load_dataset
 # setup
 MAX_TOKENS = 768
 EVAL_MAJ_BATCH_SIZE = 8
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 BOTTNECK_RANK = 16
 LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 15000
@@ -48,7 +48,7 @@ total = 0
 model.eval()
 model.to(device)  # type: ignore
 with torch.inference_mode():
-    for i in range(len(dataloader)):
+    for i in range(len(dataloader)):  # type: ignore
         print(i)
         original_param_dict = next(data_iter)
         current_batch = original_param_dict["input_ids"].shape[0]
@@ -108,9 +108,9 @@ with torch.inference_mode():
                 i * EVAL_MAJ_BATCH_SIZE : i * EVAL_MAJ_BATCH_SIZE + EVAL_MAJ_BATCH_SIZE
             ]:
                 try:
-                    if float(extract_answer(row)) == float(
-                        original_param_dict["labels"][i]  # type: ignore
-                    ):  # type: ignore
+                    if float(extract_answer(row).replace(",", "")) == float(
+                        original_param_dict["labels"][i].replace(",", "")  # type: ignore
+                    ):
                         group_correct += 1
                     else:
                         maj_dict[extract_answer(row)] = 1 + maj_dict.get(
