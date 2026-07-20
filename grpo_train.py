@@ -35,7 +35,6 @@ new_policy_v0 = load_cooked_model(
     LORA_ALPHA,
     params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
 )
-new_policy_v0.config.use_cache = False
 new_policy_v0.enable_input_require_grads()
 new_policy_v0.gradient_checkpointing_enable()
 old_policy_v0 = load_cooked_model(
@@ -44,21 +43,16 @@ old_policy_v0 = load_cooked_model(
     params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
 )
 old_policy_v0.config.use_cache = False
-old_policy_v0.enable_input_require_grads()
-old_policy_v0.gradient_checkpointing_enable()
 original_policy_v0 = load_cooked_model(
     BOTTNECK_RANK,
     LORA_ALPHA,
     params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
 )
-original_policy_v0.config.use_cache = False
-original_policy_v0.enable_input_require_grads()
-original_policy_v0.gradient_checkpointing_enable()
 train_dataloader = Dataloader(train_data, True, tokeniser, BATCH_SIZE)
 val_dataloader = Dataloader(val_data, False, tokeniser, BATCH_SIZE)
 train_iter = iter(train_dataloader)
 val_iter = iter(val_dataloader)
-optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
+policy_optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
     params=[param for param in new_policy_v0.parameters() if param.requires_grad],
     lr=MAX_LR,
 )
@@ -72,7 +66,6 @@ OLD_POLICY_LOOPS = 4
 NEW_POLICY_LOOPS = 8
 for param in original_policy_v0.parameters():
     param.requires_grad = False
-policy_optimiser = torch.optim.AdamW(lr=3e-4, params=new_policy_v0.parameters())
 episode_rewards = []
 mean_rewards = []
 for episode in range(EPISODE_NUM):
@@ -198,15 +191,12 @@ for episode in range(EPISODE_NUM):
     combined_mask_stack = torch.stack(combined_mask_stack)
     original_tokenised_prompt_stack = torch.stack(original_tokenised_prompt_stack)
     for i in range(NEW_POLICY_LOOPS):
-        out = new_policy_v0(input_ids=tokenised_prompt_stack, use_cache=True)
+        out = new_policy_v0(input_ids=tokenised_prompt_stack)
         logits = out.logits
         log_probs = F.log_softmax(logits, dim=-1)
         targets = tokenised_prompt_stack[:, :, 1:]
         new_log_probs = log_probs.gather(-1, targets)
-
-        original_out = original_policy_v0(
-            input_ids=tokenised_prompt_stack, use_cache=True
-        )
+        original_out = original_policy_v0(input_ids=tokenised_prompt_stack)
         original_logits = original_out.logits
         original_log_probs = F.log_softmax(original_logits, dim=-1)
         original_log_probs = original_log_probs.gather(-1, targets)
@@ -231,7 +221,7 @@ for episode in range(EPISODE_NUM):
                         (
                             torch.exp(original_log_probs - new_log_probs)
                             - original_log_probs
-                            - new_log_probs
+                            + new_log_probs
                             - 1
                         )
                         * combined_mask_stack
@@ -243,7 +233,6 @@ for episode in range(EPISODE_NUM):
         )
         policy_loss.backward()
         policy_optimiser.step()
-        del kv_cache
 for i in range(EPISODE_NUM // 50):
     mean_rewards.append(np.mean(episode_rewards[i * 50 : (i + 1) * 50]))
 print(mean_rewards)
