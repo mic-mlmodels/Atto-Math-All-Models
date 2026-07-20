@@ -198,18 +198,14 @@ for episode in range(EPISODE_NUM):
     combined_mask_stack = torch.stack(combined_mask_stack)
     original_tokenised_prompt_stack = torch.stack(original_tokenised_prompt_stack)
     for i in range(NEW_POLICY_LOOPS):
-        kv_cache = None
-        out = new_policy_v0(
-            input_ids=tokenised_prompt_stack, past_key_values=kv_cache, use_cache=True
-        )
-        kv_cache = out.past_key_values
+        out = new_policy_v0(input_ids=tokenised_prompt_stack, use_cache=True)
         logits = out.logits
         log_probs = F.log_softmax(logits, dim=-1)
         targets = tokenised_prompt_stack[:, :, 1:]
         new_log_probs = log_probs.gather(-1, targets)
 
         original_out = original_policy_v0(
-            input_ids=tokenised_prompt_stack, past_key_values=kv_cache, use_cache=True
+            input_ids=tokenised_prompt_stack, use_cache=True
         )
         original_logits = original_out.logits
         original_log_probs = F.log_softmax(original_logits, dim=-1)
