@@ -21,6 +21,7 @@ LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 15000
 MAX_LR = 1e-4
 MIN_LR = 1e-5
+KL_CONSTANT = 0.01  # very low but i wanna see what my model looks like as it expeditions out of the trust region, also sft model is very stupid compared to SOTA so gotta use a smaller number than SOTA to allow the model to change more
 device = "cuda" if torch.cuda.is_available() else "cpu"
 cwd = os.getcwd()
 data = load_from_disk("processed-metamathqa")
@@ -215,24 +216,33 @@ for episode in range(EPISODE_NUM):
         original_log_probs = original_log_probs.gather(-1, targets)
         policy_optimiser.zero_grad()
         old_advantage_tensor *= combined_mask_stack  # breaks computation graph btw but its ok cos we wont backprop thru to old model
-        policy_loss = -torch.mean(
-            torch.minimum(
-                torch.exp(new_log_probs - old_log_probs_stack) * old_advantage_tensor,
-                torch.clip(
-                    torch.exp(new_log_probs - old_log_probs_stack),
-                    1 - EPSILON,
-                    1 + EPSILON,
+        policy_loss = (
+            -(
+                (
+                    torch.minimum(
+                        torch.exp(new_log_probs - old_log_probs_stack)
+                        * old_advantage_tensor,
+                        torch.clip(
+                            torch.exp(new_log_probs - old_log_probs_stack),
+                            1 - EPSILON,
+                            1 + EPSILON,
+                        )
+                        * old_advantage_tensor,
+                    ).sum()
                 )
-                * old_advantage_tensor,
+                - (
+                    (
+                        (
+                            torch.exp(original_log_probs - new_log_probs)
+                            - original_log_probs
+                            - new_log_probs
+                            - 1
+                        )
+                        * combined_mask_stack
+                    ).sum()
+                    * KL_CONSTANT
+                )
             )
-        ) - (
-            (
-                torch.exp(original_log_probs - new_log_probs)
-                - original_log_probs
-                - new_log_probs
-                - 1
-            ).sum()
-            * combined_mask_stack
             / combined_mask_stack.sum()
         )
         policy_loss.backward()
@@ -241,6 +251,7 @@ for episode in range(EPISODE_NUM):
 for i in range(EPISODE_NUM // 50):
     mean_rewards.append(np.mean(episode_rewards[i * 50 : (i + 1) * 50]))
 print(mean_rewards)
+# KL constant very low so gotta do some actual model generation here once in a while to see if the model starts going insane but still gives high rewards like for example language mixing like in deepseek zero
 
 # %%
 # grpo time fellas ;D
