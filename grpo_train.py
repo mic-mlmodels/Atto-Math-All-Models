@@ -29,20 +29,36 @@ data = data.train_test_split(test_size=0.1, train_size=0.9)  # type: ignore
 train_data = data["train"]
 val_data = data["test"]
 tokeniser = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B")
-model = load_cooked_model(
+new_policy_v0 = load_cooked_model(
     BOTTNECK_RANK,
     LORA_ALPHA,
     params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
 )
-model.config.use_cache = False
-model.enable_input_require_grads()
-model.gradient_checkpointing_enable()
+new_policy_v0.config.use_cache = False
+new_policy_v0.enable_input_require_grads()
+new_policy_v0.gradient_checkpointing_enable()
+old_policy_v0 = load_cooked_model(
+    BOTTNECK_RANK,
+    LORA_ALPHA,
+    params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
+)
+old_policy_v0.config.use_cache = False
+old_policy_v0.enable_input_require_grads()
+old_policy_v0.gradient_checkpointing_enable()
+original_policy_v0 = load_cooked_model(
+    BOTTNECK_RANK,
+    LORA_ALPHA,
+    params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
+)
+original_policy_v0.config.use_cache = False
+original_policy_v0.enable_input_require_grads()
+original_policy_v0.gradient_checkpointing_enable()
 train_dataloader = Dataloader(train_data, True, tokeniser, BATCH_SIZE)
 val_dataloader = Dataloader(val_data, False, tokeniser, BATCH_SIZE)
 train_iter = iter(train_dataloader)
 val_iter = iter(val_dataloader)
 optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
-    params=[param for param in model.parameters() if param.requires_grad],
+    params=[param for param in new_policy_v0.parameters() if param.requires_grad],
     lr=MAX_LR,
 )
 
@@ -53,9 +69,6 @@ EPISODE_NUM = 1000
 EPSILON = 0.2
 OLD_POLICY_LOOPS = 4
 NEW_POLICY_LOOPS = 8
-new_policy_v0 = model.to(device)  # type: ignore
-old_policy_v0 = model.to(device)  # type: ignore
-original_policy_v0 = model.to(device)  # type: ignore
 for param in original_policy_v0.parameters():
     param.requires_grad = False
 policy_optimiser = torch.optim.AdamW(lr=3e-4, params=new_policy_v0.parameters())
@@ -228,3 +241,6 @@ for episode in range(EPISODE_NUM):
 for i in range(EPISODE_NUM // 50):
     mean_rewards.append(np.mean(episode_rewards[i * 50 : (i + 1) * 50]))
 print(mean_rewards)
+
+# %%
+# grpo time fellas ;D
