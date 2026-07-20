@@ -1,6 +1,6 @@
 # %%
 # imports
-
+import numpy as np
 import torch.nn.functional as F
 from transformers import AutoTokenizer
 from utils import extract_answer, load_cooked_model
@@ -56,15 +56,15 @@ DISCOUNT = 0.99
 EPSILON = 0.2
 OLD_POLICY_LOOPS = 4
 NEW_POLICY_LOOPS = 8
-policy_v0 = model.to(device)  # type: ignore
+new_policy_v0 = model.to(device)  # type: ignore
 old_policy_v0 = model.to(device)  # type: ignore
-policy_optimiser = torch.optim.AdamW(lr=3e-4, params=policy_v0.parameters())
+policy_optimiser = torch.optim.AdamW(lr=3e-4, params=new_policy_v0.parameters())
 episode_rewards = []
 mean_rewards = []
 for episode in range(EPISODE_NUM):
     if episode % 100 == 0:
         print(episode)
-    old_policy_v0.load_state_dict(policy_v0.state_dict())
+    old_policy_v0.load_state_dict(new_policy_v0.state_dict())
     for param in old_policy_v0.parameters():
         param.requires_grad = False
     old_log_probs_stack = []
@@ -99,7 +99,7 @@ for episode in range(EPISODE_NUM):
             kv_cache = None
             old_log_probs_lst = []
             while not finished.all() and tokenised_prompt.shape[-1] < 1024:
-                out = model(
+                out = old_policy_v0(
                     *input, past_key_values=kv_cache, use_cache=True, logits_to_keep=1
                 )
                 kv_cache = out.past_key_values
@@ -155,37 +155,38 @@ for episode in range(EPISODE_NUM):
                         )
             tokenised_prompt_stack.append(tokenised_prompt)
             old_returns_stack.append(old_returns_tensor)  # type: ignore
-            del out, original_param_dict  # type: ignore
+            del out, original_param_dict, kv_cache  # type: ignore
     old_advantage_tensor = torch.stack(old_returns_stack) - torch.mean(
         torch.stack(old_returns_stack), dim=-1
     )  # type: ignore
     old_log_probs_stack = torch.stack(old_log_probs_stack)
+    tokenised_prompt_stack = torch.stack(tokenised_prompt_stack)
     # UP TO HERE BTW JUST START IMPLEMENTING NEW POLICY LOOP
     for i in range(NEW_POLICY_LOOPS):
-        policy_optimiser.zero_grad()
-        new_action_logits = policy_v0(tokenised_prompt_stack)
-        new_action_probs = F.softmax(new_action_logits, dim=-1)
-        new_action_distributions = torch.distributions.Categorical(
-            probs=new_action_probs
+        kv_cache = None
+        out = new_policy_v0(
+            input_ids=tokenised_prompt_stack, past_key_values=kv_cache, use_cache=True
         )
-
-        new_log_probs_lst = new_action_distributions.log_prob(old_actions_lst)
+        kv_cache = out.past_key_values
+        logits = out.logits
+        log_probs = F.log_softmax(logits, dim=-1)
+        targets = tokenised_prompt_stack[:, :, 1:]
+        new_log_probs = log_probs.gather(-1, targets)
+        policy_optimiser.zero_grad()
         policy_loss = -torch.mean(
             torch.minimum(
-                torch.exp(new_log_probs_lst - old_log_probs_lst) * old_advantage_lst,
+                torch.exp(new_log_probs - old_log_probs_stack) * old_advantage_tensor,
                 torch.clip(
-                    torch.exp(new_log_probs_lst - old_log_probs_lst),
+                    torch.exp(new_log_probs - old_log_probs_stack),
                     1 - EPSILON,
                     1 + EPSILON,
                 )
-                * old_advantage_lst,
+                * old_advantage_tensor,
             )
         )
         policy_loss.backward()
-        new_state_value_lst = value_v0(old_states_lst).squeeze()
-        value_loss = torch.mean((new_state_value_lst - old_returns_lst) ** 2)
-        value_loss.backward()
         policy_optimiser.step()
+        del kv_cache
 for i in range(EPISODE_NUM // 50):
     mean_rewards.append(np.mean(episode_rewards[i * 50 : (i + 1) * 50]))
 print(mean_rewards)
