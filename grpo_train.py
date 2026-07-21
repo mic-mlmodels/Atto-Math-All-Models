@@ -22,6 +22,7 @@ NUM_STEPS = 15000
 MAX_LR = 1e-4
 MIN_LR = 1e-5
 KL_CONSTANT = 0.01  # very low but i wanna see what my model looks like as it expeditions out of the trust region, also sft model is very stupid compared to SOTA so gotta use a smaller number than SOTA to allow the model to change more
+CHECKPOINT = 2
 device = "cuda" if torch.cuda.is_available() else "cpu"
 cwd = os.getcwd()
 data = load_from_disk("processed-metamathqa")
@@ -33,20 +34,20 @@ tokeniser = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B")
 new_policy_v0 = load_cooked_model(
     BOTTNECK_RANK,
     LORA_ALPHA,
-    params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
+    params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT}.pt",
 )
 new_policy_v0.enable_input_require_grads()
 new_policy_v0.gradient_checkpointing_enable()
 old_policy_v0 = load_cooked_model(
     BOTTNECK_RANK,
     LORA_ALPHA,
-    params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
+    params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT}.pt",
 )
 old_policy_v0.config.use_cache = False
 original_policy_v0 = load_cooked_model(
     BOTTNECK_RANK,
     LORA_ALPHA,
-    params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
+    params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT}.pt",
 )
 train_dataloader = Dataloader(train_data, True, tokeniser, BATCH_SIZE)
 val_dataloader = Dataloader(val_data, False, tokeniser, BATCH_SIZE)

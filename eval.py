@@ -18,6 +18,7 @@ LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 15000
 MAX_LR = 1e-4
 MIN_LR = 1e-5
+CHECKPOINT = 2
 device = "cuda" if torch.cuda.is_available() else "cpu"
 cwd = os.getcwd()
 tokeniser = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B")
@@ -36,7 +37,7 @@ len(processed_data)
 model = load_cooked_model(
     BOTTNECK_RANK,
     LORA_ALPHA,
-    params_path=cwd + "/Atto-Math-SFT-V0-checkpoint1.pt",
+    params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT}.pt",
 )
 dataloader = Dataloader(processed_data, True, tokeniser, BATCH_SIZE, eval=True)
 data_iter = iter(dataloader)
