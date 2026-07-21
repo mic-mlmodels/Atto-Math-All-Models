@@ -22,6 +22,7 @@ LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 15000
 MAX_LR = 1e-4
 MIN_LR = 1e-5
+CHECKPOINT = 2
 
 # %%
 # data load
@@ -134,7 +135,7 @@ torch.save(
         "mean_train_loss_lst": mean_train_loss_lst,
         "mean_val_loss_lst": mean_val_loss_lst,
     },
-    "Atto-Math-SFT-V0-checkpoint1.pt",
+    f"Atto-Math-SFT-V0-checkpoint{CHECKPOINT}.pt",
 )
 
 # %%
@@ -213,7 +214,11 @@ ax.set_ylabel("Cross Entropy Loss")
 ax.grid(True, linestyle="--", alpha=0.6)
 ax.legend()
 plt.tight_layout()
-plt.savefig("Atto-Math-SFT-V0-checkpoint1 loss_curve.png", dpi=300, bbox_inches="tight")
+plt.savefig(
+    f"Atto-Math-SFT-V0-checkpoint{CHECKPOINT} loss_curve.png",
+    dpi=300,
+    bbox_inches="tight",
+)
 plt.show()
 
 # %%
