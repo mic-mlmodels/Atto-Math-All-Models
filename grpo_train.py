@@ -57,6 +57,9 @@ policy_optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
     params=[param for param in new_policy_v0.parameters() if param.requires_grad],
     lr=MAX_LR,
 )
+original_policy_v0.to(device)  # type: ignore
+old_policy_v0.to(device)  # type: ignore
+new_policy_v0.to(device)  # type: ignore
 
 # %%
 # grpo time fellas ;D
@@ -240,4 +243,13 @@ print(mean_rewards)
 # KL constant very low so gotta do some actual model generation here once in a while to see if the model starts going insane but still gives high rewards like for example language mixing like in deepseek zero
 
 # %%
-# grpo time fellas ;D
+# testing ground
+
+
+def quantise_test(model):
+    return model.model.layers[0].self_attn.q_proj.original_layer.weight.bnb_quantized
+
+
+print(quantise_test(original_policy_v0))
+print(quantise_test(old_policy_v0))
+print(quantise_test(new_policy_v0))
