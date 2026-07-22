@@ -14,8 +14,8 @@ import bitsandbytes as bnb
 # setup
 
 MAX_TOKENS = 768
-GROUP_SIZE = 8
-BATCH_SIZE = 16
+GROUP_SIZE = 4
+BATCH_SIZE = 1
 BOTTNECK_RANK = 16
 LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 15000
@@ -61,6 +61,22 @@ original_policy_v0.to(device)  # type: ignore
 old_policy_v0.to(device)  # type: ignore
 new_policy_v0.to(device)  # type: ignore
 
+old_adaptor_params = [
+    param.data
+    for name, param in old_policy_v0.named_parameters()
+    if ".adaptor." in name
+]
+new_adaptor_params = [
+    param.data
+    for name, param in new_policy_v0.named_parameters()
+    if ".adaptor." in name
+]
+
+
+def quantise_test(model):
+    return model.model.layers[0].self_attn.q_proj.original_layer.weight.bnb_quantized
+
+
 # %%
 # grpo time fellas ;D
 
@@ -73,9 +89,13 @@ for param in original_policy_v0.parameters():
 episode_rewards = []
 mean_rewards = []
 for episode in range(EPISODE_NUM):
-    if episode % 100 == 0:
-        print(episode)
-    old_policy_v0.load_state_dict(new_policy_v0.state_dict())
+    # if episode % 100 == 0:
+    #     print(episode)
+    print(episode)
+    print(quantise_test(original_policy_v0))
+    print(quantise_test(old_policy_v0))
+    print(quantise_test(new_policy_v0))
+    torch._foreach_copy_(old_adaptor_params, new_adaptor_params)
     for param in old_policy_v0.parameters():
         param.requires_grad = False
     old_log_probs_stack = []
@@ -244,12 +264,6 @@ print(mean_rewards)
 
 # %%
 # testing ground
-
-
-def quantise_test(model):
-    return model.model.layers[0].self_attn.q_proj.original_layer.weight.bnb_quantized
-
-
 print(quantise_test(original_policy_v0))
 print(quantise_test(old_policy_v0))
 print(quantise_test(new_policy_v0))
