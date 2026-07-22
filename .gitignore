@@ -13,7 +13,7 @@ wheels/
 *.swp
 *.pt
 *.pth
-*.bin
+.bin
 *.ckpt
 out/
 log

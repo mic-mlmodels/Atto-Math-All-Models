@@ -11,6 +11,8 @@ from dataloader import Dataloader
 from qlora import adapt_model
 import torch.nn.functional as F
 import torchinfo
+import os
+from utils import load_cooked_model
 
 # %%
 # constants
@@ -23,6 +25,7 @@ NUM_STEPS = 30000
 MAX_LR = 1e-4
 MIN_LR = 1e-5
 CHECKPOINT = 3
+cwd = os.getcwd()
 
 # %%
 # data load
@@ -38,9 +41,11 @@ val_data = data["test"]
 # base model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 tokeniser = AutoTokenizer.from_pretrained("Qwen2.5-1.5B base model")
-model = AutoModelForCausalLM.from_pretrained("Qwen2.5-1.5B base model")
-for param in model.parameters():
-    param.requires_grad = False
+model = load_cooked_model(
+    BOTTNECK_RANK,
+    LORA_ALPHA,
+    params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT - 1}.pt",
+)
 model.config.use_cache = False
 model.enable_input_require_grads()
 model.gradient_checkpointing_enable()
@@ -48,7 +53,6 @@ train_dataloader = Dataloader(train_data, True, tokeniser, BATCH_SIZE)
 val_dataloader = Dataloader(val_data, False, tokeniser, BATCH_SIZE)
 train_iter = iter(train_dataloader)
 val_iter = iter(val_dataloader)
-adapt_model(model, BOTTNECK_RANK, LORA_ALPHA)
 model.to(device)  # type: ignore
 optimiser = bnb.optim.PagedAdamW8bit(  # type: ignore
     params=[param for param in model.parameters() if param.requires_grad],
