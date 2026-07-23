@@ -215,7 +215,11 @@ for episode in range(EPISODE_NUM):
     old_advantage_tensor = torch.stack(old_returns_stack) - torch.mean(
         torch.stack(old_returns_stack), dim=-1
     )  # type: ignore
-    old_log_probs_stack = torch.stack(old_log_probs_stack)
+
+    max_length = max(t.shape[0] for t in old_log_probs_stack)
+    old_log_probs_stack = torch.stack(
+        [F.pad(t, (0, 0, 0, max_length - t.shape[0])) for t in old_log_probs_stack]
+    )
     tokenised_prompt_stack = torch.stack(tokenised_prompt_stack)
     combined_mask_stack = torch.stack(combined_mask_stack)
     original_tokenised_prompt_stack = torch.stack(original_tokenised_prompt_stack)
