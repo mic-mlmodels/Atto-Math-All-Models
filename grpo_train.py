@@ -92,7 +92,7 @@ for episode in range(EPISODE_NUM):
     # if episode % 100 == 0:
     #     print(episode)
     print(episode)
-    torch._foreach_copy_(old_adaptor_params, new_adaptor_params)
+    torch._foreach_copy_(old_adaptor_params, new_adaptor_params)  # type: ignore
     for param in old_policy_v0.parameters():
         param.requires_grad = False
     old_log_probs_stack = []
@@ -105,22 +105,22 @@ for episode in range(EPISODE_NUM):
             print(i)
             original_param_dict = next(train_iter)
             current_batch = original_param_dict["input_ids"].shape[0]
-            mask = (
-                original_param_dict["attention_mask"]
-                .repeat_interleave(GROUP_SIZE, dim=0)
-                .to(device)
-            )
+            labels = original_param_dict["labels"]
+            query_length = 0
+            for batch in range(labels.shape[0]):
+                for i, label in enumerate(labels[batch]):
+                    if label != -100:
+                        query_length = i
+            query_ids = original_param_dict["input_ids"][:, :query_length]
+            query_attention_mask = original_param_dict["attention_mask"][
+                :, :query_length
+            ]
+            mask = query_attention_mask.repeat_interleave(GROUP_SIZE, dim=0).to(device)
             input = (
-                original_param_dict["input_ids"]
-                .repeat_interleave(GROUP_SIZE, dim=0)
-                .to(device),
+                query_ids.repeat_interleave(GROUP_SIZE, dim=0).to(device),
                 mask,
             )
-            tokenised_prompt = (
-                original_param_dict["input_ids"]
-                .repeat_interleave(GROUP_SIZE, dim=0)
-                .to(device)
-            )
+            tokenised_prompt = query_ids.repeat_interleave(GROUP_SIZE, dim=0).to(device)
             original_tokenised_prompt_stack.append(tokenised_prompt)
             finished = torch.zeros(
                 current_batch * GROUP_SIZE,
