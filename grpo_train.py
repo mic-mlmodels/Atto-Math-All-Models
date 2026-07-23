@@ -180,7 +180,11 @@ for episode in range(EPISODE_NUM):
                 for row in decoded_out[i * GROUP_SIZE : i * GROUP_SIZE + GROUP_SIZE]:
                     try:
                         if float(extract_answer(row).replace(",", "")) == float(
-                            original_param_dict["labels"][i].replace(",", "")  # type: ignore
+                            extract_answer(
+                                tokeniser.decode(
+                                    original_param_dict["input_ids"][0]
+                                ).replace(",", "")
+                            )  # type: ignore
                         ):
                             old_returns_tensor = torch.ones_like(
                                 old_log_probs_tensor, device=device
@@ -267,3 +271,5 @@ print(mean_rewards)
 print(quantise_test(original_policy_v0))
 print(quantise_test(old_policy_v0))
 print(quantise_test(new_policy_v0))
+
+tokeniser.decode(train_data[0])
