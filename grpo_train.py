@@ -92,9 +92,6 @@ for episode in range(EPISODE_NUM):
     # if episode % 100 == 0:
     #     print(episode)
     print(episode)
-    print(quantise_test(original_policy_v0))
-    print(quantise_test(old_policy_v0))
-    print(quantise_test(new_policy_v0))
     torch._foreach_copy_(old_adaptor_params, new_adaptor_params)
     for param in old_policy_v0.parameters():
         param.requires_grad = False
@@ -177,27 +174,31 @@ for episode in range(EPISODE_NUM):
             for i in range(current_batch):
                 group_correct = 0
                 maj_dict = {}
-                for row in decoded_out[i * GROUP_SIZE : i * GROUP_SIZE + GROUP_SIZE]:
+                print(old_log_probs_tensor)
+                print(old_log_probs_tensor.shape)
+                for j, row in enumerate(
+                    decoded_out[i * GROUP_SIZE : i * GROUP_SIZE + GROUP_SIZE]
+                ):
                     try:
                         if float(extract_answer(row).replace(",", "")) == float(
                             extract_answer(
                                 tokeniser.decode(
-                                    original_param_dict["input_ids"][0]
+                                    original_param_dict["input_ids"][i]
                                 ).replace(",", "")
                             )  # type: ignore
                         ):
                             old_returns_tensor = torch.ones_like(
-                                old_log_probs_tensor, device=device
+                                old_log_probs_tensor[j], device=device
                             )
                             group_correct += 1
                         else:
                             old_returns_tensor = torch.zeros_like(
-                                old_log_probs_tensor, device=device
+                                old_log_probs_tensor[j], device=device
                             )
                     except ValueError:
                         print("Value error oh no")
                         old_returns_tensor = torch.zeros_like(
-                            old_log_probs_tensor, device=device
+                            old_log_probs_tensor[j], device=device
                         )
                 episode_rewards.append(group_correct)
             original_prompt_idx = original_tokenised_prompt_stack[-1].shape[-1]
