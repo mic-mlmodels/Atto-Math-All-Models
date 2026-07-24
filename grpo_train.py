@@ -223,10 +223,10 @@ for episode in range(EPISODE_NUM):
     old_log_probs_stack = torch.stack(
         [F.pad(t, (0, 0, 0, max_length - t.shape[0])) for t in old_log_probs_stack]
     )
-    max_sequence_length = max(t.shape[0] for t in tokenised_prompt_stack)
+    max_sequence_length = max(t.shape[-1] for t in tokenised_prompt_stack)
     tokenised_prompt_stack = torch.stack(
         [
-            F.pad(t, (0, 0, 0, max_sequence_length - t.shape[0]))
+            F.pad(t, (0, max_sequence_length - t.shape[-1], 0, 0))
             for t in tokenised_prompt_stack
         ]
     )
