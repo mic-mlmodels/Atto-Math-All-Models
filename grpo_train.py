@@ -219,25 +219,30 @@ for episode in range(EPISODE_NUM):
         torch.stack(old_returns_stack), dim=-1
     )  # type: ignore
 
-    max_length = max(t.shape[0] for t in old_log_probs_stack)
-    old_log_probs_stack = torch.stack(
-        [F.pad(t, (0, 0, 0, max_length - t.shape[0])) for t in old_log_probs_stack]
-    )
     max_sequence_length = max(t.shape[-1] for t in tokenised_prompt_stack)
-    tokenised_prompt_stack = torch.stack(
+    old_log_probs_stack = torch.cat(
+        [
+            F.pad(t, (0, 0, 0, max_sequence_length - t.shape[0])).T
+            for t in old_log_probs_stack
+        ],
+        dim=0,
+    )
+    tokenised_prompt_stack = torch.cat(
         [
             F.pad(t, (0, max_sequence_length - t.shape[-1], 0, 0))
             for t in tokenised_prompt_stack
-        ]
+        ],
+        dim=0,
     )
-    combined_mask_stack = torch.stack(
+    combined_mask_stack = torch.cat(
         [
             F.pad(t, (0, max_sequence_length - t.shape[-1], 0, 0))
             for t in combined_mask_stack
-        ]
+        ],
+        dim=0,
     )
-    original_tokenised_prompt_stack = torch.stack(original_tokenised_prompt_stack)
     for i in range(NEW_POLICY_LOOPS):
+        print(tokenised_prompt_stack.shape)
         out = new_policy_v0(input_ids=tokenised_prompt_stack)
         logits = out.logits
         log_probs = F.log_softmax(logits, dim=-1)
