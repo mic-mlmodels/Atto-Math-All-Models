@@ -22,7 +22,7 @@ NUM_STEPS = 15000
 MAX_LR = 1e-4
 MIN_LR = 1e-5
 KL_CONSTANT = 0.01  # very low but i wanna see what my model looks like as it expeditions out of the trust region, also sft model is very stupid compared to SOTA so gotta use a smaller number than SOTA to allow the model to change more
-CHECKPOINT = 2
+CHECKPOINT = 4
 device = "cuda" if torch.cuda.is_available() else "cpu"
 cwd = os.getcwd()
 data = load_from_disk("processed-metamathqa")
@@ -179,8 +179,6 @@ for episode in range(EPISODE_NUM):
             for i in range(current_batch):
                 group_correct = 0
                 maj_dict = {}
-                print(old_log_probs_tensor)
-                print(old_log_probs_tensor.shape)
                 for j, row in enumerate(
                     decoded_out[i * GROUP_SIZE : i * GROUP_SIZE + GROUP_SIZE]
                 ):
@@ -225,7 +223,13 @@ for episode in range(EPISODE_NUM):
     old_log_probs_stack = torch.stack(
         [F.pad(t, (0, 0, 0, max_length - t.shape[0])) for t in old_log_probs_stack]
     )
-    tokenised_prompt_stack = torch.stack(tokenised_prompt_stack)
+    max_sequence_length = max(t.shape[0] for t in tokenised_prompt_stack)
+    tokenised_prompt_stack = torch.stack(
+        [
+            F.pad(t, (0, 0, 0, max_sequence_length - t.shape[0]))
+            for t in tokenised_prompt_stack
+        ]
+    )
     combined_mask_stack = torch.stack(combined_mask_stack)
     original_tokenised_prompt_stack = torch.stack(original_tokenised_prompt_stack)
     for i in range(NEW_POLICY_LOOPS):
