@@ -230,7 +230,12 @@ for episode in range(EPISODE_NUM):
             for t in tokenised_prompt_stack
         ]
     )
-    combined_mask_stack = torch.stack(combined_mask_stack)
+    combined_mask_stack = torch.stack(
+        [
+            F.pad(t, (0, max_sequence_length - t.shape[-1], 0, 0))
+            for t in combined_mask_stack
+        ]
+    )
     original_tokenised_prompt_stack = torch.stack(original_tokenised_prompt_stack)
     for i in range(NEW_POLICY_LOOPS):
         out = new_policy_v0(input_ids=tokenised_prompt_stack)
