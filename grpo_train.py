@@ -178,6 +178,9 @@ for episode in range(EPISODE_NUM):
             )
             decoded_out = tokeniser.batch_decode(tokenised_prompt)
             old_log_probs_tensor = torch.stack(old_log_probs_lst)
+            old_log_probs_tensor = F.pad(
+                old_log_probs_tensor, (0, 0, query_length - 1, 0)
+            )
             old_log_probs_stack.append(old_log_probs_tensor)
             for i in range(current_batch):
                 group_correct = 0
@@ -225,7 +228,7 @@ for episode in range(EPISODE_NUM):
     max_sequence_length = max(t.shape[-1] for t in tokenised_prompt_stack)
     old_log_probs_stack = torch.cat(
         [
-            F.pad(t, (0, 0, 0, max_sequence_length - t.shape[0])).T
+            F.pad(t, (0, 0, 0, (max_sequence_length - 1) - t.shape[0])).T
             for t in old_log_probs_stack
         ],
         dim=0,
@@ -239,7 +242,7 @@ for episode in range(EPISODE_NUM):
     )
     combined_mask_stack = torch.cat(
         [
-            F.pad(t, (0, max_sequence_length - t.shape[-1], 0, 0))
+            F.pad(t, (0, (max_sequence_length - 1) - t.shape[-1], 0, 0))
             for t in combined_mask_stack
         ],
         dim=0,
