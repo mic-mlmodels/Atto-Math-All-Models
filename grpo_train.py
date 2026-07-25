@@ -49,6 +49,8 @@ original_policy_v0 = load_cooked_model(
     LORA_ALPHA,
     params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT}.pt",
 )
+for param in original_policy_v0.parameters():
+    param.requires_grad = False
 train_dataloader = Dataloader(train_data, True, tokeniser, BATCH_SIZE)
 val_dataloader = Dataloader(val_data, False, tokeniser, BATCH_SIZE)
 train_iter = iter(train_dataloader)
