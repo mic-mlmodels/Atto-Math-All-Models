@@ -265,6 +265,7 @@ for episode in range(EPISODE_NUM):
             out = new_policy_v0(input_ids=sliced_tokenised_prompt_stack)
             logits = out.logits
             log_probs = F.log_softmax(logits, dim=-1)
+            del out, logits
             targets = sliced_tokenised_prompt_stack[:, 1:]
             new_log_probs = log_probs.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
             original_out = original_policy_v0(input_ids=sliced_tokenised_prompt_stack)
@@ -273,12 +274,15 @@ for episode in range(EPISODE_NUM):
             original_log_probs = original_log_probs.gather(
                 -1, targets.unsqueeze(-1)
             ).squeeze(-1)
+            del original_out, original_logits
             policy_optimiser.zero_grad()
             print(old_advantage_stack.shape)
             print(sliced_old_advantage_tensor.shape)
             print(combined_mask_stack.shape)
             print(sliced_combined_mask_stack.shape)
-            sliced_old_advantage_tensor *= sliced_combined_mask_stack  # breaks computation graph btw but its ok cos we wont backprop thru to old model
+            sliced_old_advantage_tensor = (
+                sliced_old_advantage_tensor * sliced_combined_mask_stack
+            )
             policy_loss = (
                 -(
                     (
@@ -314,8 +318,6 @@ for episode in range(EPISODE_NUM):
                 sliced_old_advantage_tensor,
                 sliced_old_log_probs,
                 sliced_tokenised_prompt_stack,
-                out,
-                logits,
                 log_probs,
                 targets,
             )
