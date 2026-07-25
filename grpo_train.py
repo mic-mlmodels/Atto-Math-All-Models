@@ -15,7 +15,7 @@ import bitsandbytes as bnb
 
 MAX_TOKENS = 768
 GROUP_SIZE = 4
-BATCH_SIZE = 1
+BATCH_SIZE = 16
 BOTTNECK_RANK = 16
 LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 15000
@@ -23,7 +23,7 @@ MAX_LR = 1e-4
 MIN_LR = 1e-5
 KL_CONSTANT = 0.01  # very low but i wanna see what my model looks like as it expeditions out of the trust region, also sft model is very stupid compared to SOTA so gotta use a smaller number than SOTA to allow the model to change more
 CHECKPOINT = 4
-NEW_POLICY_SLICE_SIZE = 1
+NEW_POLICY_SLICE_SIZE = 1  # seems small but can NOT raise this any higher even on my 5070 due to the output vocab size being so large
 EPSILON = 0.2
 OLD_POLICY_LOOPS = 4
 NEW_POLICY_LOOPS = 8
@@ -253,7 +253,7 @@ for episode in range(EPISODE_NUM):
     )
     old_advantage_stack = old_advantage_stack.view(-1, 1)
     for i in range(NEW_POLICY_LOOPS):
-        print(tokenised_prompt_stack.shape)
+        policy_optimiser.zero_grad()
         for i in range(0, tokenised_prompt_stack.shape[0], NEW_POLICY_SLICE_SIZE):
             sliced_tokenised_prompt_stack = tokenised_prompt_stack[
                 i : i + NEW_POLICY_SLICE_SIZE
@@ -278,7 +278,6 @@ for episode in range(EPISODE_NUM):
                 -1, targets.unsqueeze(-1)
             ).squeeze(-1)
             del original_out, original_logits
-            policy_optimiser.zero_grad()
             print(old_advantage_stack.shape)
             print(sliced_old_advantage_tensor.shape)
             print(combined_mask_stack.shape)
