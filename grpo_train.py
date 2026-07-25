@@ -23,7 +23,7 @@ MAX_LR = 1e-4
 MIN_LR = 1e-5
 KL_CONSTANT = 0.01  # very low but i wanna see what my model looks like as it expeditions out of the trust region, also sft model is very stupid compared to SOTA so gotta use a smaller number than SOTA to allow the model to change more
 CHECKPOINT = 4
-NEW_POLICY_SECONDARY_BATCH = 4
+NEW_POLICY_SLICE_SIZE = 1
 EPSILON = 0.2
 OLD_POLICY_LOOPS = 4
 NEW_POLICY_LOOPS = 8
@@ -194,18 +194,22 @@ for episode in range(EPISODE_NUM):
                             )  # type: ignore
                         ):
                             old_returns_tensor = torch.ones_like(
-                                old_log_probs_tensor[j], device=device
+                                old_log_probs_tensor[0, i * GROUP_SIZE + j],
+                                device=device,
                             )
                             group_correct += 1
                         else:
                             old_returns_tensor = torch.zeros_like(
-                                old_log_probs_tensor[j], device=device
+                                old_log_probs_tensor[0, i * GROUP_SIZE + j],
+                                device=device,
                             )
                     except ValueError:
                         print("Value error oh no")
                         old_returns_tensor = torch.zeros_like(
-                            old_log_probs_tensor[j], device=device
+                            old_log_probs_tensor[0, i * GROUP_SIZE + j],
+                            device=device,
                         )
+                    old_returns_stack.append(old_returns_tensor)  # type: ignore
                 episode_rewards.append(group_correct)
             original_prompt_idx = original_tokenised_prompt_stack[-1].shape[-1]
             seq_len = tokenised_prompt.shape[-1]
@@ -216,11 +220,7 @@ for episode in range(EPISODE_NUM):
             ).float()
             combined_mask_stack.append(combined_mask)
             tokenised_prompt_stack.append(tokenised_prompt)
-            old_returns_stack.append(old_returns_tensor)  # type: ignore
             del out, original_param_dict, kv_cache  # type: ignore
-    old_advantage_tensor = torch.stack(old_returns_stack) - torch.mean(
-        torch.stack(old_returns_stack), dim=-1
-    )  # type: ignore
 
     max_sequence_length = max(t.shape[-1] for t in tokenised_prompt_stack)
     old_log_probs_stack = torch.cat(
@@ -244,20 +244,23 @@ for episode in range(EPISODE_NUM):
         ],
         dim=0,
     )
+    old_returns_stack = torch.stack(old_returns_stack).view(-1, GROUP_SIZE)  # type: ignore
+    old_advantage_stack = old_returns_stack - old_returns_stack.mean(
+        dim=-1, keepdim=True
+    )
+    old_advantage_stack = old_advantage_stack.view(-1, 1)
     for i in range(NEW_POLICY_LOOPS):
         print(tokenised_prompt_stack.shape)
-        for i in range(0, tokenised_prompt_stack.shape[0], NEW_POLICY_SECONDARY_BATCH):
+        for i in range(0, tokenised_prompt_stack.shape[0], NEW_POLICY_SLICE_SIZE):
             sliced_tokenised_prompt_stack = tokenised_prompt_stack[
-                i : i + NEW_POLICY_SECONDARY_BATCH
+                i : i + NEW_POLICY_SLICE_SIZE
             ]
-            sliced_old_log_probs = old_log_probs_stack[
-                i : i + NEW_POLICY_SECONDARY_BATCH
-            ]
-            sliced_old_advantage_tensor = old_advantage_tensor[
-                i : i + NEW_POLICY_SECONDARY_BATCH
+            sliced_old_log_probs = old_log_probs_stack[i : i + NEW_POLICY_SLICE_SIZE]
+            sliced_old_advantage_tensor = old_advantage_stack[
+                i : i + NEW_POLICY_SLICE_SIZE
             ]
             sliced_combined_mask_stack = combined_mask_stack[
-                i : i + NEW_POLICY_SECONDARY_BATCH
+                i : i + NEW_POLICY_SLICE_SIZE
             ]
             out = new_policy_v0(input_ids=sliced_tokenised_prompt_stack)
             logits = out.logits
@@ -271,6 +274,10 @@ for episode in range(EPISODE_NUM):
                 -1, targets.unsqueeze(-1)
             ).squeeze(-1)
             policy_optimiser.zero_grad()
+            print(old_advantage_stack.shape)
+            print(sliced_old_advantage_tensor.shape)
+            print(combined_mask_stack.shape)
+            print(sliced_combined_mask_stack.shape)
             sliced_old_advantage_tensor *= sliced_combined_mask_stack  # breaks computation graph btw but its ok cos we wont backprop thru to old model
             policy_loss = (
                 -(
