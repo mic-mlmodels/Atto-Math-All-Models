@@ -109,7 +109,7 @@ for episode in range(EPISODE_NUM):
             original_param_dict = next(train_iter)
             current_batch = original_param_dict["input_ids"].shape[0]
             labels = original_param_dict["labels"]
-            query_length = (labels == -100).sum(dim=-1)
+            query_length = (labels != -100).long().argmax(dim=-1)
             highest_query_length = max(query_length)
             padded_old_input_ids = torch.stack(
                 [
@@ -118,7 +118,7 @@ for episode in range(EPISODE_NUM):
                 ]
             )
             query_ids = padded_old_input_ids[:, :highest_query_length]
-            query_attention_mask = (query_ids != tokeniser.pad_token_id).long
+            query_attention_mask = (query_ids != tokeniser.pad_token_id).long()
             mask = query_attention_mask.repeat_interleave(GROUP_SIZE, dim=0).to(device)
             input = (
                 query_ids.repeat_interleave(GROUP_SIZE, dim=0).to(device),
