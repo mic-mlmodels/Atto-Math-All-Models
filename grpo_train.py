@@ -182,7 +182,7 @@ for episode in range(EPISODE_NUM):
             print(f"query_length{query_length.shape}")
             print(f"max_query{highest_query_length.shape}")
             old_log_probs_tensor = F.pad(
-                old_log_probs_tensor, (int(highest_query_length) - 1, 0, 0, 0)
+                old_log_probs_tensor, (0, 0, int(highest_query_length) - 1, 0)
             ).T
             old_log_probs_stack.append(old_log_probs_tensor)
             for i in range(current_batch):
