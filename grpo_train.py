@@ -287,13 +287,13 @@ for episode in range(EPISODE_NUM):
                         tokeniser.decode(original_param_dict["input_ids"][i])
                     ):
                         old_returns_tensor = torch.ones_like(
-                            old_log_probs_tensor[0, i * GROUP_SIZE + j],
+                            old_log_probs_tensor[i * GROUP_SIZE + j, 0],
                             device=device,
                         )
                         group_correct += 1
                     else:
                         old_returns_tensor = torch.zeros_like(
-                            old_log_probs_tensor[0, i * GROUP_SIZE + j],
+                            old_log_probs_tensor[i * GROUP_SIZE + j, 0],
                             device=device,
                         )
                     old_returns_stack.append(old_returns_tensor)  # type: ignore
@@ -427,7 +427,9 @@ for i in range(EPISODE_NUM // 5):
     mean_rewards.append(np.mean(episode_rewards[i * 5 : (i + 1) * 5]))
 print(mean_rewards)
 for i in range(EPISODE_NUM // (5 * 10)):
-    val_mean_rewards.append(np.mean(val_episode_rewards[i * 5 : (i + 1) * 5]))
+    val_mean_rewards.append(
+        np.mean(val_episode_rewards[i * 5 : (i + 1) * 5]) * GROUP_SIZE
+    )
 print(val_mean_rewards)
 # KL constant very low so gotta do some actual model generation here once in a while to see if the model starts going insane but still gives high rewards like for example language mixing like in deepseek zero
 
