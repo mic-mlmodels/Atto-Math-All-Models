@@ -111,13 +111,17 @@ for episode in range(EPISODE_NUM):
             labels = original_param_dict["labels"]
             query_length = (labels != -100).long().argmax(dim=-1)
             highest_query_length = max(query_length)
-            padded_old_input_ids = torch.stack(
+            query_ids = torch.stack(
                 [
-                    F.pad(t, (int(highest_query_length) - int(query_length[i]), 0))
+                    F.pad(
+                        t,
+                        (int(highest_query_length) - int(query_length[i]), 0),
+                        value=tokeniser.pad_token_id,
+                    )[:highest_query_length]
                     for i, t in enumerate(original_param_dict["input_ids"])
                 ]
             )
-            query_ids = padded_old_input_ids[:, :highest_query_length]
+            print(f"query ids{query_ids.shape}")
             query_attention_mask = (query_ids != tokeniser.pad_token_id).long()
             mask = query_attention_mask.repeat_interleave(GROUP_SIZE, dim=0).to(device)
             input = (
@@ -174,9 +178,12 @@ for episode in range(EPISODE_NUM):
             )
             decoded_out = tokeniser.batch_decode(tokenised_prompt)
             old_log_probs_tensor = torch.stack(old_log_probs_lst)
+            print(f"old_log_probs_tensor{old_log_probs_tensor.shape}")
+            print(f"query_length{query_length.shape}")
+            print(f"max_query{highest_query_length.shape}")
             old_log_probs_tensor = F.pad(
-                old_log_probs_tensor, (0, 0, query_length - 1, 0)
-            )
+                old_log_probs_tensor, (int(highest_query_length) - 1, 0, 0, 0)
+            ).T
             old_log_probs_stack.append(old_log_probs_tensor)
             for i in range(current_batch):
                 group_correct = 0
