@@ -109,16 +109,7 @@ for episode in range(EPISODE_NUM):
             original_param_dict = next(train_iter)
             current_batch = original_param_dict["input_ids"].shape[0]
             labels = original_param_dict["labels"]
-            query_length = []
-            for batch in range(
-                labels.shape[0]
-            ):  # REMINDER TO SELF TO GET RID OF THIS EXTREMELY SLOW LOOP LATER WITH VECTORISATION
-                for i, label in enumerate(labels[batch]):
-                    if label != -100:
-                        query_length.append(i)
-            query_length = query_length[
-                0
-            ]  # MAKESHIFT SOLUTION REMOVE LATER PLS WHEN THE BATCH IS INCREASED JUST WANNA GET EVERYTHING ELSE WORKING FIRST
+            query_length = (labels == -100).sum(dim=-1)
             query_ids = original_param_dict["input_ids"][:, :query_length]
             query_attention_mask = original_param_dict["attention_mask"][
                 :, :query_length
@@ -278,10 +269,6 @@ for episode in range(EPISODE_NUM):
                 -1, targets.unsqueeze(-1)
             ).squeeze(-1)
             del original_out, original_logits
-            print(old_advantage_stack.shape)
-            print(sliced_old_advantage_tensor.shape)
-            print(combined_mask_stack.shape)
-            print(sliced_combined_mask_stack.shape)
             sliced_old_advantage_tensor = (
                 sliced_old_advantage_tensor * sliced_combined_mask_stack
             )
