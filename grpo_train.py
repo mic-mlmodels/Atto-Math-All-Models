@@ -1,7 +1,6 @@
 # %%
 # imports
 import numpy as np
-from torch.distributed import group
 import torch.nn.functional as F
 from transformers import AutoTokenizer
 from utils import extract_answer, load_cooked_model
@@ -92,9 +91,110 @@ for param in original_policy_v0.parameters():
     param.requires_grad = False
 mean_rewards = []
 episode_rewards = []
+val_episode_rewards = []
+val_mean_rewards = []
 for episode in range(EPISODE_NUM):
-    # if episode % 100 == 0:
-    #     print(episode)
+    if episode % 10 == 0:
+        val_episode_corrects = 0
+        with torch.no_grad():
+            for i in range(OLD_POLICY_LOOPS):
+                print(i)
+                try:
+                    original_param_dict = next(train_iter)
+                except StopIteration:
+                    train_iter = iter(train_dataloader)
+                    original_param_dict = next(train_iter)
+                current_batch = original_param_dict["input_ids"].shape[0]
+                labels = original_param_dict["labels"]
+                query_length = (labels != -100).long().argmax(dim=-1)
+                highest_query_length = max(query_length)
+                query_ids = torch.stack(
+                    [
+                        F.pad(
+                            t,
+                            (int(highest_query_length) - int(query_length[i]), 0),
+                            value=tokeniser.pad_token_id,
+                        )[:highest_query_length]
+                        for i, t in enumerate(original_param_dict["input_ids"])
+                    ]
+                )
+                query_attention_mask = (query_ids != tokeniser.pad_token_id).long()
+                mask = query_attention_mask.repeat_interleave(GROUP_SIZE, dim=0).to(
+                    device
+                )
+                input = (
+                    query_ids.repeat_interleave(GROUP_SIZE, dim=0).to(device),
+                    mask,
+                )
+                tokenised_prompt = query_ids.repeat_interleave(GROUP_SIZE, dim=0).to(
+                    device
+                )
+                finished = torch.zeros(
+                    current_batch * GROUP_SIZE,
+                    dtype=torch.bool,
+                ).to(device)
+                finished_idx = torch.full(
+                    (current_batch * GROUP_SIZE,), -1, dtype=torch.long
+                ).to(device)
+                imend_token = tokeniser.convert_tokens_to_ids("<|im_end|>")
+                kv_cache = None
+                while not finished.all() and tokenised_prompt.shape[-1] < 1024:
+                    out = new_policy_v0(
+                        *input,
+                        past_key_values=kv_cache,
+                        use_cache=True,
+                        logits_to_keep=1,
+                    )
+                    kv_cache = out.past_key_values
+                    logits = out.logits
+                    probs = F.softmax(logits[:, -1, :], dim=-1)
+                    dist_obj = torch.distributions.Categorical(probs)
+                    next_word = dist_obj.sample()
+                    mask = torch.cat(
+                        (
+                            mask,
+                            torch.ones(GROUP_SIZE * current_batch, 1, device=device),
+                        ),
+                        dim=-1,
+                    )
+                    input = (next_word.unsqueeze(1), mask)
+                    just_finished = (~finished) & (
+                        (next_word == tokeniser.eos_token_id)
+                        | (next_word == imend_token)
+                    )
+                    finished = finished | just_finished
+                    tokenised_prompt = torch.cat(
+                        (tokenised_prompt, torch.unsqueeze(next_word, dim=1)),
+                        dim=-1,
+                    )
+                    finished_idx = torch.where(
+                        just_finished,
+                        torch.full_like(finished_idx, tokenised_prompt.shape[-1]),
+                        finished_idx,
+                    )
+                finished_idx = torch.where(
+                    finished_idx == -1,
+                    torch.full_like(finished_idx, tokenised_prompt.shape[-1]),
+                    finished_idx,
+                )
+                decoded_out = tokeniser.batch_decode(tokenised_prompt)
+                for i in range(current_batch):
+                    group_correct = 0
+                    for j, row in enumerate(
+                        decoded_out[i * GROUP_SIZE : i * GROUP_SIZE + GROUP_SIZE]
+                    ):
+                        if float(extract_answer(row).replace(",", "")) == float(
+                            extract_answer(
+                                tokeniser.decode(
+                                    original_param_dict["input_ids"][i]
+                                ).replace(",", "")
+                            )  # type: ignore
+                        ):
+                            group_correct += 1
+                    val_episode_corrects += group_correct
+                del out, original_param_dict, kv_cache  # type: ignore
+            val_episode_rewards.append(val_episode_corrects)
+
     print(f"episode: {episode}")
     torch._foreach_copy_(old_adaptor_params, new_adaptor_params)  # type: ignore
     for param in old_policy_v0.parameters():
@@ -190,17 +290,14 @@ for episode in range(EPISODE_NUM):
             old_log_probs_stack.append(old_log_probs_tensor)
             for i in range(current_batch):
                 group_correct = 0
-                maj_dict = {}
                 for j, row in enumerate(
                     decoded_out[i * GROUP_SIZE : i * GROUP_SIZE + GROUP_SIZE]
                 ):
                     try:
-                        if float(extract_answer(row).replace(",", "")) == float(
-                            extract_answer(
-                                tokeniser.decode(
-                                    original_param_dict["input_ids"][i]
-                                ).replace(",", "")
-                            )  # type: ignore
+                        if (extract_answer(row).replace(",", "")) == extract_answer(
+                            tokeniser.decode(
+                                original_param_dict["input_ids"][i]
+                            ).replace(",", "")
                         ):
                             old_returns_tensor = torch.ones_like(
                                 old_log_probs_tensor[0, i * GROUP_SIZE + j],
@@ -348,6 +445,9 @@ for episode in range(EPISODE_NUM):
 for i in range(EPISODE_NUM // 5):
     mean_rewards.append(np.mean(episode_rewards[i * 5 : (i + 1) * 5]))
 print(mean_rewards)
+for i in range(EPISODE_NUM // (5 * 10)):
+    val_mean_rewards.append(np.mean(val_episode_rewards[i * 5 : (i + 1) * 5]))
+print(val_mean_rewards)
 # KL constant very low so gotta do some actual model generation here once in a while to see if the model starts going insane but still gives high rewards like for example language mixing like in deepseek zero
 
 # %%
