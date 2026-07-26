@@ -120,23 +120,19 @@ for episode in range(EPISODE_NUM):
                     ]
                 )
                 query_attention_mask = (query_ids != tokeniser.pad_token_id).long()
-                mask = query_attention_mask.repeat_interleave(GROUP_SIZE, dim=0).to(
-                    device
-                )
+                mask = query_attention_mask.to(device)
                 input = (
-                    query_ids.repeat_interleave(GROUP_SIZE, dim=0).to(device),
+                    query_ids.to(device),
                     mask,
                 )
-                tokenised_prompt = query_ids.repeat_interleave(GROUP_SIZE, dim=0).to(
-                    device
-                )
+                tokenised_prompt = query_ids.to(device)
                 finished = torch.zeros(
-                    current_batch * GROUP_SIZE,
+                    current_batch,
                     dtype=torch.bool,
                 ).to(device)
-                finished_idx = torch.full(
-                    (current_batch * GROUP_SIZE,), -1, dtype=torch.long
-                ).to(device)
+                finished_idx = torch.full((current_batch,), -1, dtype=torch.long).to(
+                    device
+                )
                 imend_token = tokeniser.convert_tokens_to_ids("<|im_end|>")
                 kv_cache = None
                 while not finished.all() and tokenised_prompt.shape[-1] < 1024:
@@ -148,13 +144,11 @@ for episode in range(EPISODE_NUM):
                     )
                     kv_cache = out.past_key_values
                     logits = out.logits
-                    probs = F.softmax(logits[:, -1, :], dim=-1)
-                    dist_obj = torch.distributions.Categorical(probs)
-                    next_word = dist_obj.sample()
+                    next_word = logits[:, -1, :].argmax(dim=-1)
                     mask = torch.cat(
                         (
                             mask,
-                            torch.ones(GROUP_SIZE * current_batch, 1, device=device),
+                            torch.ones(current_batch, 1, device=device),
                         ),
                         dim=-1,
                     )
@@ -181,9 +175,7 @@ for episode in range(EPISODE_NUM):
                 decoded_out = tokeniser.batch_decode(tokenised_prompt)
                 for i in range(current_batch):
                     group_correct = 0
-                    for j, row in enumerate(
-                        decoded_out[i * GROUP_SIZE : i * GROUP_SIZE + GROUP_SIZE]
-                    ):
+                    for j, row in enumerate(decoded_out[i : i + 1]):
                         if extract_answer(row) == extract_answer(
                             tokeniser.decode(original_param_dict["input_ids"][i])
                         ):
