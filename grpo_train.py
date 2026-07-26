@@ -103,6 +103,7 @@ for episode in range(EPISODE_NUM):
     tokenised_prompt_stack = []
     original_tokenised_prompt_stack = []
     combined_mask_stack = []
+    attention_mask_stack = []
     with torch.no_grad():
         for i in range(OLD_POLICY_LOOPS):
             print(i)
@@ -222,16 +223,17 @@ for episode in range(EPISODE_NUM):
             positions = torch.arange(1, seq_len, device=device).unsqueeze(0)
             combined_mask = (
                 (positions >= original_prompt_idx)
-                & (positions <= finished_idx.unsqueeze(1))
+                & (positions < finished_idx.unsqueeze(1))
             ).float()
             combined_mask_stack.append(combined_mask)
             tokenised_prompt_stack.append(tokenised_prompt)
+            attention_mask_stack.append(mask)
             del out, original_param_dict, kv_cache  # type: ignore
 
     max_sequence_length = max(t.shape[-1] for t in tokenised_prompt_stack)
     old_log_probs_stack = torch.cat(
         [
-            F.pad(t, (0, 0, 0, (max_sequence_length - 1) - t.shape[0])).T
+            F.pad(t, (0, (max_sequence_length - 1) - t.shape[-1], 0, 0))
             for t in old_log_probs_stack
         ],
         dim=0,
@@ -247,6 +249,13 @@ for episode in range(EPISODE_NUM):
         [
             F.pad(t, (0, (max_sequence_length - 1) - t.shape[-1], 0, 0))
             for t in combined_mask_stack
+        ],
+        dim=0,
+    )
+    attention_mask_stack = torch.cat(
+        [
+            F.pad(t, (0, max_sequence_length - t.shape[-1], 0, 0))
+            for t in attention_mask_stack
         ],
         dim=0,
     )
@@ -268,13 +277,22 @@ for episode in range(EPISODE_NUM):
             sliced_combined_mask_stack = combined_mask_stack[
                 i : i + NEW_POLICY_SLICE_SIZE
             ]
-            out = new_policy_v0(input_ids=sliced_tokenised_prompt_stack)
+            sliced_attention_mask_stack = attention_mask_stack[
+                i : i + NEW_POLICY_SLICE_SIZE
+            ]
+            out = new_policy_v0(
+                input_ids=sliced_tokenised_prompt_stack,
+                attention_mask=sliced_attention_mask_stack,
+            )
             logits = out.logits
             log_probs = F.log_softmax(logits, dim=-1)
             del out, logits
             targets = sliced_tokenised_prompt_stack[:, 1:]
             new_log_probs = log_probs.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
-            original_out = original_policy_v0(input_ids=sliced_tokenised_prompt_stack)
+            original_out = original_policy_v0(
+                input_ids=sliced_tokenised_prompt_stack,
+                attention_mask=sliced_attention_mask_stack,
+            )
             original_logits = original_out.logits
             original_log_probs = F.log_softmax(original_logits, dim=-1)
             original_log_probs = original_log_probs.gather(
@@ -316,6 +334,7 @@ for episode in range(EPISODE_NUM):
             policy_loss.backward()
             del (
                 sliced_combined_mask_stack,
+                sliced_attention_mask_stack,
                 sliced_old_advantage_tensor,
                 sliced_old_log_probs,
                 sliced_tokenised_prompt_stack,
