@@ -107,7 +107,11 @@ for episode in range(EPISODE_NUM):
     with torch.no_grad():
         for i in range(OLD_POLICY_LOOPS):
             print(i)
-            original_param_dict = next(train_iter)
+            try:
+                original_param_dict = next(train_iter)
+            except StopIteration:
+                train_iter = iter(train_dataloader)
+                original_param_dict = next(train_iter)
             current_batch = original_param_dict["input_ids"].shape[0]
             labels = original_param_dict["labels"]
             query_length = (labels != -100).long().argmax(dim=-1)
