@@ -1,6 +1,7 @@
 # %%
 # imports
 import numpy as np
+from torch.distributed import group
 import torch.nn.functional as F
 from transformers import AutoTokenizer
 from utils import extract_answer, load_cooked_model
@@ -86,15 +87,15 @@ def quantise_test(model):
 # %%
 # grpo time fellas ;D
 
-EPISODE_NUM = 1000
+EPISODE_NUM = 10
 for param in original_policy_v0.parameters():
     param.requires_grad = False
-episode_rewards = []
 mean_rewards = []
+episode_rewards = []
 for episode in range(EPISODE_NUM):
     # if episode % 100 == 0:
     #     print(episode)
-    print(episode)
+    print(f"episode: {episode}")
     torch._foreach_copy_(old_adaptor_params, new_adaptor_params)  # type: ignore
     for param in old_policy_v0.parameters():
         param.requires_grad = False
@@ -104,6 +105,7 @@ for episode in range(EPISODE_NUM):
     original_tokenised_prompt_stack = []
     combined_mask_stack = []
     attention_mask_stack = []
+    episode_corrects = 0
     with torch.no_grad():
         for i in range(OLD_POLICY_LOOPS):
             print(i)
@@ -126,7 +128,6 @@ for episode in range(EPISODE_NUM):
                     for i, t in enumerate(original_param_dict["input_ids"])
                 ]
             )
-            print(f"query ids{query_ids.shape}")
             query_attention_mask = (query_ids != tokeniser.pad_token_id).long()
             mask = query_attention_mask.repeat_interleave(GROUP_SIZE, dim=0).to(device)
             input = (
@@ -183,9 +184,6 @@ for episode in range(EPISODE_NUM):
             )
             decoded_out = tokeniser.batch_decode(tokenised_prompt)
             old_log_probs_tensor = torch.stack(old_log_probs_lst)
-            print(f"old_log_probs_tensor{old_log_probs_tensor.shape}")
-            print(f"query_length{query_length.shape}")
-            print(f"max_query{highest_query_length.shape}")
             old_log_probs_tensor = F.pad(
                 old_log_probs_tensor, (0, 0, int(highest_query_length) - 1, 0)
             ).T
@@ -221,7 +219,7 @@ for episode in range(EPISODE_NUM):
                             device=device,
                         )
                     old_returns_stack.append(old_returns_tensor)  # type: ignore
-                episode_rewards.append(group_correct)
+                episode_corrects += group_correct
             original_prompt_idx = original_tokenised_prompt_stack[-1].shape[-1]
             seq_len = tokenised_prompt.shape[-1]
             positions = torch.arange(1, seq_len, device=device).unsqueeze(0)
@@ -233,6 +231,7 @@ for episode in range(EPISODE_NUM):
             tokenised_prompt_stack.append(tokenised_prompt)
             attention_mask_stack.append(mask)
             del out, original_param_dict, kv_cache  # type: ignore
+        episode_rewards.append(episode_corrects)
 
     max_sequence_length = max(t.shape[-1] for t in tokenised_prompt_stack)
     old_log_probs_stack = torch.cat(
@@ -346,8 +345,8 @@ for episode in range(EPISODE_NUM):
                 targets,
             )
         policy_optimiser.step()
-for i in range(EPISODE_NUM // 50):
-    mean_rewards.append(np.mean(episode_rewards[i * 50 : (i + 1) * 50]))
+for i in range(EPISODE_NUM // 5):
+    mean_rewards.append(np.mean(episode_rewards[i * 5 : (i + 1) * 5]))
 print(mean_rewards)
 # KL constant very low so gotta do some actual model generation here once in a while to see if the model starts going insane but still gives high rewards like for example language mixing like in deepseek zero
 
