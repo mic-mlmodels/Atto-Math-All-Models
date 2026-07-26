@@ -99,11 +99,12 @@ for episode in range(EPISODE_NUM):
         with torch.no_grad():
             for i in range(OLD_POLICY_LOOPS):
                 print(i)
+                new_policy_v0.eval()
                 try:
-                    original_param_dict = next(train_iter)
+                    original_param_dict = next(val_iter)
                 except StopIteration:
-                    train_iter = iter(train_dataloader)
-                    original_param_dict = next(train_iter)
+                    val_iter = iter(val_dataloader)
+                    original_param_dict = next(val_iter)
                 current_batch = original_param_dict["input_ids"].shape[0]
                 labels = original_param_dict["labels"]
                 query_length = (labels != -100).long().argmax(dim=-1)
@@ -183,12 +184,8 @@ for episode in range(EPISODE_NUM):
                     for j, row in enumerate(
                         decoded_out[i * GROUP_SIZE : i * GROUP_SIZE + GROUP_SIZE]
                     ):
-                        if float(extract_answer(row).replace(",", "")) == float(
-                            extract_answer(
-                                tokeniser.decode(
-                                    original_param_dict["input_ids"][i]
-                                ).replace(",", "")
-                            )  # type: ignore
+                        if extract_answer(row) == extract_answer(
+                            tokeniser.decode(original_param_dict["input_ids"][i])
                         ):
                             group_correct += 1
                     val_episode_corrects += group_correct
@@ -196,6 +193,7 @@ for episode in range(EPISODE_NUM):
             val_episode_rewards.append(val_episode_corrects)
 
     print(f"episode: {episode}")
+    new_policy_v0.train()
     torch._foreach_copy_(old_adaptor_params, new_adaptor_params)  # type: ignore
     for param in old_policy_v0.parameters():
         param.requires_grad = False
@@ -293,24 +291,15 @@ for episode in range(EPISODE_NUM):
                 for j, row in enumerate(
                     decoded_out[i * GROUP_SIZE : i * GROUP_SIZE + GROUP_SIZE]
                 ):
-                    try:
-                        if (extract_answer(row).replace(",", "")) == extract_answer(
-                            tokeniser.decode(
-                                original_param_dict["input_ids"][i]
-                            ).replace(",", "")
-                        ):
-                            old_returns_tensor = torch.ones_like(
-                                old_log_probs_tensor[0, i * GROUP_SIZE + j],
-                                device=device,
-                            )
-                            group_correct += 1
-                        else:
-                            old_returns_tensor = torch.zeros_like(
-                                old_log_probs_tensor[0, i * GROUP_SIZE + j],
-                                device=device,
-                            )
-                    except ValueError:
-                        print("Value error oh no")
+                    if extract_answer(row) == extract_answer(
+                        tokeniser.decode(original_param_dict["input_ids"][i])
+                    ):
+                        old_returns_tensor = torch.ones_like(
+                            old_log_probs_tensor[0, i * GROUP_SIZE + j],
+                            device=device,
+                        )
+                        group_correct += 1
+                    else:
                         old_returns_tensor = torch.zeros_like(
                             old_log_probs_tensor[0, i * GROUP_SIZE + j],
                             device=device,
