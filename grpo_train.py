@@ -14,7 +14,7 @@ import bitsandbytes as bnb
 # %%
 # setup
 
-CHECKPOINT = 4
+CHECKPOINT = 5
 MEAN_WINDOW = 5
 VAL_INTERVAL = 10
 MAX_TOKENS = 768
@@ -89,7 +89,7 @@ def quantise_test(model):
 # %%
 # grpo time fellas ;D
 
-EPISODE_NUM = 10
+EPISODE_NUM = 100
 for param in original_policy_v0.parameters():
     param.requires_grad = False
 mean_rewards = []
@@ -189,6 +189,7 @@ for episode in range(EPISODE_NUM):
             val_episode_rewards.append(val_episode_corrects)
 
     print(f"episode: {episode}")
+    new_policy_v0.config.use_cache = False
     new_policy_v0.train()
     torch._foreach_copy_(old_adaptor_params, new_adaptor_params)  # type: ignore
     for param in old_policy_v0.parameters():
