@@ -432,7 +432,7 @@ for i in range(EPISODE_NUM // MEAN_WINDOW):
         np.mean(episode_rewards[i * MEAN_WINDOW : (i + 1) * MEAN_WINDOW])
     )
 print(mean_rewards)
-for i in range(EPISODE_NUM // (MEAN_WINDOW)):
+for i in range(EPISODE_NUM // (MEAN_WINDOW * VAL_INTERVAL)):
     val_mean_rewards.append(
         np.mean(val_episode_rewards[i * MEAN_WINDOW : (i + 1) * MEAN_WINDOW])
         * GROUP_SIZE
