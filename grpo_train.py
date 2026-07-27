@@ -1,5 +1,6 @@
 # %%
 # imports
+import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn.functional as F
 from transformers import AutoTokenizer
@@ -13,6 +14,7 @@ import bitsandbytes as bnb
 # %%
 # setup
 
+CHECKPOINT = 4
 MAX_TOKENS = 768
 GROUP_SIZE = 4
 BATCH_SIZE = 16
@@ -22,7 +24,6 @@ NUM_STEPS = 15000
 MAX_LR = 1e-4
 MIN_LR = 1e-5
 KL_CONSTANT = 0.01  # very low but i wanna see what my model looks like as it expeditions out of the trust region, also sft model is very stupid compared to SOTA so gotta use a smaller number than SOTA to allow the model to change more
-CHECKPOINT = 4
 NEW_POLICY_SLICE_SIZE = 1  # seems small but can NOT raise this any higher even on my 5070 due to the output vocab size being so large
 EPSILON = 0.2
 OLD_POLICY_LOOPS = 4
@@ -93,6 +94,7 @@ mean_rewards = []
 episode_rewards = []
 val_episode_rewards = []
 val_mean_rewards = []
+print("Atto-Math-RL model cooking...")
 for episode in range(EPISODE_NUM):
     if episode % 10 == 0:
         val_episode_corrects = 0
@@ -431,7 +433,46 @@ for i in range(EPISODE_NUM // (5 * 10)):
         np.mean(val_episode_rewards[i * 5 : (i + 1) * 5]) * GROUP_SIZE
     )
 print(val_mean_rewards)
-# KL constant very low so gotta do some actual model generation here once in a while to see if the model starts going insane but still gives high rewards like for example language mixing like in deepseek zero
+print("Atto-Math-RL model cooked!")
+
+torch.save(
+    {
+        "model_state_dict": {
+            name: param
+            for name, param in new_policy_v0.named_parameters()
+            if param.requires_grad
+        },
+        "mean_rewards": mean_rewards,
+        "val_mean_rewards": val_mean_rewards,
+    },
+    f"Atto-Math-RL-V0-checkpoint{CHECKPOINT}.pt",
+)
+# %%
+# graph
+
+fig, ax = plt.subplots(figsize=(10, 6))
+x_train_steps = np.arange(0, len(mean_rewards) * 5, 5)
+x_val_steps = np.arange(0, len(val_mean_rewards) * 50, 50)
+ax.plot(
+    x_train_steps,
+    mean_rewards,
+    label="Train Mean Rewards (Mean every 5 train steps)",
+)
+ax.plot(
+    x_val_steps, val_mean_rewards, label="Mean Val Rewards (Mean every 5 val steps)"
+)
+ax.set_title("Mean Rewards curve")
+ax.set_xlabel("Training Step")
+ax.set_ylabel("Mean Rewards")
+ax.grid(True, linestyle="--", alpha=0.6)
+ax.legend()
+plt.tight_layout()
+plt.savefig(
+    f"Atto-Math-RL-V0-checkpoint{CHECKPOINT} rewards_curve.png",
+    dpi=300,
+    bbox_inches="tight",
+)
+plt.show()
 
 # %%
 # testing ground
@@ -440,9 +481,3 @@ print(quantise_test(old_policy_v0))
 print(quantise_test(new_policy_v0))
 
 tokeniser.decode(train_data[0])
-
-with torch.no_grad():
-    tiny_out = new_policy_v0(
-        input_ids=torch.zeros(1, 2, dtype=torch.long, device=device)
-    )
-    print(tiny_out.logits.dtype)
