@@ -15,6 +15,8 @@ import bitsandbytes as bnb
 # setup
 
 CHECKPOINT = 4
+MEAN_WINDOW = 5
+VAL_INTERVAL = 10
 MAX_TOKENS = 768
 GROUP_SIZE = 4
 BATCH_SIZE = 16
@@ -96,7 +98,7 @@ val_episode_rewards = []
 val_mean_rewards = []
 print("Atto-Math-RL model cooking...")
 for episode in range(EPISODE_NUM):
-    if episode % 10 == 0:
+    if episode % VAL_INTERVAL == 0:
         val_episode_corrects = 0
         with torch.no_grad():
             for i in range(OLD_POLICY_LOOPS):
@@ -425,12 +427,15 @@ for episode in range(EPISODE_NUM):
                 targets,
             )
         policy_optimiser.step()
-for i in range(EPISODE_NUM // 5):
-    mean_rewards.append(np.mean(episode_rewards[i * 5 : (i + 1) * 5]))
+for i in range(EPISODE_NUM // MEAN_WINDOW):
+    mean_rewards.append(
+        np.mean(episode_rewards[i * MEAN_WINDOW : (i + 1) * MEAN_WINDOW])
+    )
 print(mean_rewards)
-for i in range(EPISODE_NUM // (5 * 10)):
+for i in range(EPISODE_NUM // (MEAN_WINDOW * 10)):
     val_mean_rewards.append(
-        np.mean(val_episode_rewards[i * 5 : (i + 1) * 5]) * GROUP_SIZE
+        np.mean(val_episode_rewards[i * MEAN_WINDOW : (i + 1) * MEAN_WINDOW])
+        * GROUP_SIZE
     )
 print(val_mean_rewards)
 print("Atto-Math-RL model cooked!")
@@ -451,15 +456,19 @@ torch.save(
 # graph
 
 fig, ax = plt.subplots(figsize=(10, 6))
-x_train_steps = np.arange(0, len(mean_rewards) * 5, 5)
-x_val_steps = np.arange(0, len(val_mean_rewards) * 50, 50)
+x_train_steps = np.arange(0, len(mean_rewards) * MEAN_WINDOW, MEAN_WINDOW)
+x_val_steps = np.arange(
+    0, len(val_mean_rewards) * MEAN_WINDOW * VAL_INTERVAL, MEAN_WINDOW * VAL_INTERVAL
+)
 ax.plot(
     x_train_steps,
     mean_rewards,
-    label="Train Mean Rewards (Mean every 5 train steps)",
+    label=f"Train Mean Rewards (Mean every {MEAN_WINDOW} train steps)",
 )
 ax.plot(
-    x_val_steps, val_mean_rewards, label="Mean Val Rewards (Mean every 5 val steps)"
+    x_val_steps,
+    val_mean_rewards,
+    label=f"Mean Val Rewards (Mean every {MEAN_WINDOW} val steps)",
 )
 ax.set_title("Mean Rewards curve")
 ax.set_xlabel("Training Step")
