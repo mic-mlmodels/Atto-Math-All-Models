@@ -41,20 +41,20 @@ tokeniser = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B")
 new_policy_v0 = load_cooked_model(
     BOTTNECK_RANK,
     LORA_ALPHA,
-    params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT}.pt",
+    params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT - 1}.pt",
 )
 new_policy_v0.enable_input_require_grads()
 new_policy_v0.gradient_checkpointing_enable()
 old_policy_v0 = load_cooked_model(
     BOTTNECK_RANK,
     LORA_ALPHA,
-    params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT}.pt",
+    params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT - 1}.pt",
 )
 old_policy_v0.config.use_cache = False
 original_policy_v0 = load_cooked_model(
     BOTTNECK_RANK,
     LORA_ALPHA,
-    params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT}.pt",
+    params_path=cwd + f"/Atto-Math-SFT-V0-checkpoint{CHECKPOINT - 1}.pt",
 )
 for param in original_policy_v0.parameters():
     param.requires_grad = False
@@ -432,13 +432,15 @@ for i in range(EPISODE_NUM // MEAN_WINDOW):
         np.mean(episode_rewards[i * MEAN_WINDOW : (i + 1) * MEAN_WINDOW])
     )
 print(mean_rewards)
-for i in range(EPISODE_NUM // (MEAN_WINDOW * 10)):
+for i in range(EPISODE_NUM // (MEAN_WINDOW)):
     val_mean_rewards.append(
         np.mean(val_episode_rewards[i * MEAN_WINDOW : (i + 1) * MEAN_WINDOW])
         * GROUP_SIZE
     )
 print(val_mean_rewards)
 print("Atto-Math-RL model cooked!")
+# %%
+# checkpoint
 
 torch.save(
     {
