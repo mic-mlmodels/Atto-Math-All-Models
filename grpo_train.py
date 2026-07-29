@@ -493,3 +493,9 @@ print(quantise_test(old_policy_v0))
 print(quantise_test(new_policy_v0))
 
 tokeniser.decode(train_data[0])
+
+beloved_checkpoint = torch.load(
+    "Atto-Math-SFT-V0-checkpoint1.pt", map_location="cpu", weights_only=False
+)
+beloved_checkpoint["mean_train_loss_lst"][0]
+beloved_checkpoint["mean_val_loss_lst"][0]
