@@ -5,10 +5,9 @@ from torch.optim.lr_scheduler import ChainedScheduler, LinearLR, CosineAnnealing
 import numpy as np
 import torch
 from datasets import load_from_disk
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer
 import bitsandbytes as bnb
 from dataloader import Dataloader
-from qlora import adapt_model
 import torch.nn.functional as F
 import torchinfo
 import os
@@ -21,7 +20,7 @@ MAX_TOKENS = 768
 BATCH_SIZE = 2
 BOTTNECK_RANK = 16
 LORA_ALPHA = BOTTNECK_RANK * 2
-NUM_STEPS = 10000
+NUM_STEPS = 1000
 MAX_LR = 1e-4
 MIN_LR = 1e-5
 CHECKPOINT = 5
