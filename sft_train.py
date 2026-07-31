@@ -23,7 +23,7 @@ LORA_ALPHA = BOTTNECK_RANK * 2
 NUM_STEPS = 149000
 MAX_LR = 1e-4
 MIN_LR = 1e-5
-CHECKPOINT = 6
+CHECKPOINT = 7
 cwd = os.getcwd()
 
 # %%
